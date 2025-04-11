@@ -9,6 +9,47 @@ export type Json =
 export type Database = {
   public: {
     Tables: {
+      attendance_records: {
+        Row: {
+          created_at: string | null
+          date: string
+          employee_id: string | null
+          id: string
+          note: string | null
+          status: string
+          time_in: string | null
+          time_out: string | null
+        }
+        Insert: {
+          created_at?: string | null
+          date: string
+          employee_id?: string | null
+          id?: string
+          note?: string | null
+          status: string
+          time_in?: string | null
+          time_out?: string | null
+        }
+        Update: {
+          created_at?: string | null
+          date?: string
+          employee_id?: string | null
+          id?: string
+          note?: string | null
+          status?: string
+          time_in?: string | null
+          time_out?: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "attendance_records_employee_id_fkey"
+            columns: ["employee_id"]
+            isOneToOne: false
+            referencedRelation: "employees"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       cash_transactions: {
         Row: {
           amount: number
@@ -119,6 +160,48 @@ export type Database = {
           total_orders?: number | null
           total_spent?: number | null
           user_id?: string | null
+        }
+        Relationships: []
+      }
+      employees: {
+        Row: {
+          created_at: string | null
+          date_of_birth: string | null
+          department: string
+          email: string
+          fingerprint: string | null
+          id: string
+          image_url: string | null
+          join_date: string
+          name: string
+          phone_number: string | null
+          position: string
+        }
+        Insert: {
+          created_at?: string | null
+          date_of_birth?: string | null
+          department: string
+          email: string
+          fingerprint?: string | null
+          id?: string
+          image_url?: string | null
+          join_date: string
+          name: string
+          phone_number?: string | null
+          position: string
+        }
+        Update: {
+          created_at?: string | null
+          date_of_birth?: string | null
+          department?: string
+          email?: string
+          fingerprint?: string | null
+          id?: string
+          image_url?: string | null
+          join_date?: string
+          name?: string
+          phone_number?: string | null
+          position?: string
         }
         Relationships: []
       }

@@ -12,7 +12,7 @@ export const subscribeToAttendanceChanges = (callback: RealtimeSubscriptionCallb
       {
         event: '*', // Listen for all events (INSERT, UPDATE, DELETE)
         schema: 'public',
-        table: 'staff'  // Using 'staff' table as a substitute for attendance records
+        table: 'attendance_records'
       },
       (payload) => callback(payload)
     )
@@ -29,7 +29,7 @@ export const subscribeToEmployeeChanges = (callback: RealtimeSubscriptionCallbac
       {
         event: '*', // Listen for all events (INSERT, UPDATE, DELETE)
         schema: 'public',
-        table: 'staff'  // Using 'staff' as our employees table
+        table: 'employees'
       },
       (payload) => callback(payload)
     )

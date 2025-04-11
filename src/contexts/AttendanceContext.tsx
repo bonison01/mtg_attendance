@@ -32,29 +32,47 @@ export const AttendanceProvider: React.FC<{ children: React.ReactNode }> = ({ ch
       setLoading(true);
       
       try {
-        // Fetch employees - using staff table as substitute
-        const { data: staffData, error: staffError } = await supabase
-          .from('staff')
+        // Fetch employees
+        const { data: employeeData, error: employeeError } = await supabase
+          .from('employees')
           .select('*');
           
-        if (staffError) throw staffError;
+        if (employeeError) throw employeeError;
         
-        // Map staff data to our Employee type
-        const mappedEmployees: Employee[] = staffData.map((staff: any) => ({
-          id: staff.id,
-          name: `${staff.first_name} ${staff.last_name}`,
-          email: staff.staff_email,
-          phoneNumber: '',
-          position: staff.role,
-          department: '',
-          joinDate: staff.created_at ? new Date(staff.created_at).toISOString().split('T')[0] : '',
-          imageUrl: ''
+        // Map database data to our Employee type
+        const mappedEmployees: Employee[] = employeeData.map((emp: any) => ({
+          id: emp.id,
+          name: emp.name,
+          email: emp.email,
+          phoneNumber: emp.phone_number || '',
+          position: emp.position,
+          department: emp.department || '',
+          joinDate: emp.join_date,
+          imageUrl: emp.image_url || '',
+          fingerprint: emp.fingerprint || null
         }));
         
         setEmployees(mappedEmployees);
         
-        // For attendance records, we can use an empty array since there's no direct equivalent
-        setAttendanceRecords([]);
+        // Fetch attendance records
+        const { data: attendanceData, error: attendanceError } = await supabase
+          .from('attendance_records')
+          .select('*');
+        
+        if (attendanceError) throw attendanceError;
+        
+        // Map database data to our AttendanceRecord type
+        const mappedAttendance: AttendanceRecord[] = attendanceData.map((record: any) => ({
+          id: record.id,
+          employeeId: record.employee_id,
+          date: record.date,
+          timeIn: record.time_in || undefined,
+          timeOut: record.time_out || undefined,
+          status: record.status,
+          note: record.note || ''
+        }));
+        
+        setAttendanceRecords(mappedAttendance);
       } catch (error: any) {
         toast({
           variant: 'destructive',
@@ -77,22 +95,28 @@ export const AttendanceProvider: React.FC<{ children: React.ReactNode }> = ({ ch
       if (eventType === 'INSERT') {
         const newEmployee: Employee = {
           id: newRecord.id,
-          name: `${newRecord.first_name} ${newRecord.last_name}`,
-          email: newRecord.staff_email,
-          phoneNumber: '',
-          position: newRecord.role,
-          department: '',
-          joinDate: newRecord.created_at ? new Date(newRecord.created_at).toISOString().split('T')[0] : '',
-          imageUrl: ''
+          name: newRecord.name,
+          email: newRecord.email,
+          phoneNumber: newRecord.phone_number || '',
+          position: newRecord.position,
+          department: newRecord.department || '',
+          joinDate: newRecord.join_date,
+          imageUrl: newRecord.image_url || '',
+          fingerprint: newRecord.fingerprint || null
         };
         setEmployees(prev => [...prev, newEmployee]);
       } else if (eventType === 'UPDATE') {
         setEmployees(prev => prev.map(emp => 
           emp.id === newRecord.id ? {
             ...emp,
-            name: `${newRecord.first_name} ${newRecord.last_name}`,
-            email: newRecord.staff_email,
-            position: newRecord.role,
+            name: newRecord.name,
+            email: newRecord.email,
+            phoneNumber: newRecord.phone_number || '',
+            position: newRecord.position,
+            department: newRecord.department || '',
+            joinDate: newRecord.join_date,
+            imageUrl: newRecord.image_url || '',
+            fingerprint: newRecord.fingerprint || null
           } : emp
         ));
       } else if (eventType === 'DELETE') {
@@ -101,8 +125,34 @@ export const AttendanceProvider: React.FC<{ children: React.ReactNode }> = ({ ch
     });
     
     const attendanceChannel = subscribeToAttendanceChanges((payload) => {
-      // Since we don't have a direct attendance_records table in existing schema,
-      // we'll just skip this implementation for now
+      const { eventType, new: newRecord, old: oldRecord } = payload;
+      
+      if (eventType === 'INSERT') {
+        const newAttendance: AttendanceRecord = {
+          id: newRecord.id,
+          employeeId: newRecord.employee_id,
+          date: newRecord.date,
+          timeIn: newRecord.time_in || undefined,
+          timeOut: newRecord.time_out || undefined,
+          status: newRecord.status,
+          note: newRecord.note || ''
+        };
+        setAttendanceRecords(prev => [...prev, newAttendance]);
+      } else if (eventType === 'UPDATE') {
+        setAttendanceRecords(prev => prev.map(record => 
+          record.id === newRecord.id ? {
+            ...record,
+            employeeId: newRecord.employee_id,
+            date: newRecord.date,
+            timeIn: newRecord.time_in || undefined,
+            timeOut: newRecord.time_out || undefined,
+            status: newRecord.status,
+            note: newRecord.note || ''
+          } : record
+        ));
+      } else if (eventType === 'DELETE') {
+        setAttendanceRecords(prev => prev.filter(record => record.id !== oldRecord.id));
+      }
     });
     
     return () => {
@@ -113,19 +163,21 @@ export const AttendanceProvider: React.FC<{ children: React.ReactNode }> = ({ ch
 
   const addEmployee = async (employee: Omit<Employee, 'id'>): Promise<string | undefined> => {
     try {
-      // Map our Employee type to staff table columns
-      const staffData = {
-        first_name: employee.name.split(' ')[0],
-        last_name: employee.name.split(' ').slice(1).join(' '),
-        staff_email: employee.email,
-        role: employee.position,
-        user_id: '00000000-0000-0000-0000-000000000000', // placeholder
-        status: 'active'
+      // Map our Employee type to database columns
+      const employeeData = {
+        name: employee.name,
+        email: employee.email,
+        phone_number: employee.phoneNumber,
+        position: employee.position,
+        department: employee.department,
+        join_date: employee.joinDate,
+        date_of_birth: employee.date_of_birth,
+        image_url: employee.imageUrl
       };
       
       const { data, error } = await supabase
-        .from('staff')
-        .insert(staffData)
+        .from('employees')
+        .insert(employeeData)
         .select()
         .single();
         
@@ -150,7 +202,7 @@ export const AttendanceProvider: React.FC<{ children: React.ReactNode }> = ({ ch
   const removeEmployee = async (id: string): Promise<void> => {
     try {
       const { error } = await supabase
-        .from('staff')
+        .from('employees')
         .delete()
         .eq('id', id);
         
@@ -171,25 +223,20 @@ export const AttendanceProvider: React.FC<{ children: React.ReactNode }> = ({ ch
 
   const updateEmployee = async (id: string, employee: Partial<Employee>): Promise<void> => {
     try {
-      // Map our Employee type to staff table columns
+      // Map our Employee type to database columns
       const updateData: any = {};
       
-      if (employee.name) {
-        const nameParts = employee.name.split(' ');
-        updateData.first_name = nameParts[0];
-        updateData.last_name = nameParts.slice(1).join(' ');
-      }
-      
-      if (employee.email) {
-        updateData.staff_email = employee.email;
-      }
-      
-      if (employee.position) {
-        updateData.role = employee.position;
-      }
+      if (employee.name) updateData.name = employee.name;
+      if (employee.email) updateData.email = employee.email;
+      if (employee.phoneNumber) updateData.phone_number = employee.phoneNumber;
+      if (employee.position) updateData.position = employee.position;
+      if (employee.department) updateData.department = employee.department;
+      if (employee.joinDate) updateData.join_date = employee.joinDate;
+      if (employee.imageUrl) updateData.image_url = employee.imageUrl;
+      if (employee.date_of_birth) updateData.date_of_birth = employee.date_of_birth;
       
       const { error } = await supabase
-        .from('staff')
+        .from('employees')
         .update(updateData)
         .eq('id', id);
         
@@ -213,17 +260,21 @@ export const AttendanceProvider: React.FC<{ children: React.ReactNode }> = ({ ch
       const today = new Date().toISOString().split('T')[0];
       const now = new Date().toLocaleTimeString();
       
-      // Instead of inserting to a non-existent table, we'll just update our local state
-      // and show a toast notification
-      const newAttendanceRecord: AttendanceRecord = {
-        id: Math.random().toString(36).substring(2, 15),
-        employeeId: employeeId,
+      const attendanceData = {
+        employee_id: employeeId,
         date: today,
-        timeIn: now,
-        status: new Date().getHours() >= 9 ? 'late' : 'present'
+        time_in: now,
+        status: new Date().getHours() >= 9 ? 'late' : 'present',
+        note: ''
       };
       
-      setAttendanceRecords(prev => [...prev, newAttendanceRecord]);
+      const { data, error } = await supabase
+        .from('attendance_records')
+        .insert(attendanceData)
+        .select()
+        .single();
+      
+      if (error) throw error;
       
       toast({
         title: 'Clock In',
@@ -243,13 +294,26 @@ export const AttendanceProvider: React.FC<{ children: React.ReactNode }> = ({ ch
       const today = new Date().toISOString().split('T')[0];
       const now = new Date().toLocaleTimeString();
       
-      // Update the record in our local state
-      setAttendanceRecords(prev => prev.map(record => {
-        if (record.employeeId === employeeId && record.date === today && !record.timeOut) {
-          return { ...record, timeOut: now };
-        }
-        return record;
-      }));
+      // Find today's attendance record for this employee
+      const { data, error: findError } = await supabase
+        .from('attendance_records')
+        .select('*')
+        .eq('employee_id', employeeId)
+        .eq('date', today)
+        .is('time_out', null)
+        .single();
+      
+      if (findError) {
+        throw new Error('No clock-in record found for today');
+      }
+      
+      // Update the record with clock out time
+      const { error: updateError } = await supabase
+        .from('attendance_records')
+        .update({ time_out: now })
+        .eq('id', data.id);
+      
+      if (updateError) throw updateError;
       
       toast({
         title: 'Clock Out',
@@ -274,14 +338,14 @@ export const AttendanceProvider: React.FC<{ children: React.ReactNode }> = ({ ch
 
   const resetPassword = async (email: string, dateOfBirth: string): Promise<boolean> => {
     try {
-      // First, try to find a staff member by email
-      const { data: staff, error: staffError } = await supabase
-        .from('staff')
+      // First, try to find an employee by email
+      const { data: employee, error: employeeError } = await supabase
+        .from('employees')
         .select('*')
-        .eq('staff_email', email)
+        .eq('email', email)
         .single();
         
-      if (staffError) {
+      if (employeeError) {
         toast({
           variant: 'destructive',
           title: 'Verification Failed',
@@ -290,8 +354,18 @@ export const AttendanceProvider: React.FC<{ children: React.ReactNode }> = ({ ch
         return false;
       }
       
-      // Since we don't have date_of_birth in staff table, we'll just simulate success
-      // In a real implementation, you'd check against actual stored date of birth
+      // Check if date of birth matches
+      const employeeDob = employee.date_of_birth ? new Date(employee.date_of_birth).toISOString().split('T')[0] : null;
+      const providedDob = new Date(dateOfBirth).toISOString().split('T')[0];
+      
+      if (employeeDob !== providedDob) {
+        toast({
+          variant: 'destructive',
+          title: 'Verification Failed',
+          description: 'Date of birth does not match our records',
+        });
+        return false;
+      }
       
       // Send password recovery email
       const { error } = await supabase.auth.resetPasswordForEmail(email, {
