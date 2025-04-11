@@ -2,6 +2,7 @@
 import React from 'react';
 import Sidebar from './Sidebar';
 import { useLocation } from 'react-router-dom';
+import { useAuth } from '@/contexts/AuthContext';
 
 interface MainLayoutProps {
   children: React.ReactNode;
@@ -9,10 +10,19 @@ interface MainLayoutProps {
 
 const MainLayout: React.FC<MainLayoutProps> = ({ children }) => {
   const location = useLocation();
-  const isLoginPage = location.pathname === '/login';
+  const { loading } = useAuth();
+  const isAuthPage = location.pathname === '/login' || location.pathname === '/auth';
 
-  if (isLoginPage) {
+  if (isAuthPage) {
     return <>{children}</>;
+  }
+
+  if (loading) {
+    return (
+      <div className="flex justify-center items-center h-screen">
+        <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-gray-900"></div>
+      </div>
+    );
   }
 
   return (
