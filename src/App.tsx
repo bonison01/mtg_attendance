@@ -16,6 +16,7 @@ import ClockInOut from "./pages/ClockInOut";
 import Attendance from "./pages/Attendance";
 import Reports from "./pages/Reports";
 import Settings from "./pages/Settings";
+import PasswordReset from "./pages/PasswordReset";
 import NotFound from "./pages/NotFound";
 
 const queryClient = new QueryClient();
@@ -28,56 +29,69 @@ const App = () => (
           <Toaster />
           <Sonner />
           <BrowserRouter>
-            <MainLayout>
-              <Routes>
-                <Route path="/auth" element={<Auth />} />
-                <Route path="/login" element={<Auth />} />
-                
-                <Route path="/" element={
+            <Routes>
+              <Route path="/auth" element={<Auth />} />
+              <Route path="/login" element={<Auth />} />
+              <Route path="/reset-password" element={<PasswordReset />} />
+              
+              <Route path="/" element={
+                <MainLayout>
                   <AuthGuard>
                     <Dashboard />
                   </AuthGuard>
-                } />
-                
-                <Route path="/employees" element={
+                </MainLayout>
+              } />
+              
+              <Route path="/employees" element={
+                <MainLayout>
                   <AuthGuard requireAdmin={true}>
                     <Employees />
                   </AuthGuard>
-                } />
-                
-                <Route path="/register" element={
+                </MainLayout>
+              } />
+              
+              <Route path="/register" element={
+                <MainLayout>
                   <AuthGuard requireAdmin={true}>
                     <EmployeeRegistration />
                   </AuthGuard>
-                } />
-                
-                <Route path="/clock" element={
+                </MainLayout>
+              } />
+              
+              <Route path="/clock" element={
+                <MainLayout>
                   <AuthGuard>
                     <ClockInOut />
                   </AuthGuard>
-                } />
-                
-                <Route path="/attendance" element={
+                </MainLayout>
+              } />
+              
+              <Route path="/attendance" element={
+                <MainLayout>
                   <AuthGuard>
                     <Attendance />
                   </AuthGuard>
-                } />
-                
-                <Route path="/reports" element={
+                </MainLayout>
+              } />
+              
+              <Route path="/reports" element={
+                <MainLayout>
                   <AuthGuard requireAdmin={true}>
                     <Reports />
                   </AuthGuard>
-                } />
-                
-                <Route path="/settings" element={
+                </MainLayout>
+              } />
+              
+              <Route path="/settings" element={
+                <MainLayout>
                   <AuthGuard requireAdmin={true}>
                     <Settings />
                   </AuthGuard>
-                } />
-                
-                <Route path="*" element={<NotFound />} />
-              </Routes>
-            </MainLayout>
+                </MainLayout>
+              } />
+              
+              <Route path="*" element={<NotFound />} />
+            </Routes>
           </BrowserRouter>
         </AttendanceProvider>
       </AuthProvider>

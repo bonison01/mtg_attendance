@@ -1,6 +1,6 @@
 
 import React, { useState } from 'react';
-import { useNavigate, useLocation, Navigate } from 'react-router-dom';
+import { useNavigate, useLocation, Navigate, Link } from 'react-router-dom';
 import {
   Card,
   CardContent,
@@ -90,9 +90,12 @@ const Auth = () => {
                 <div className="space-y-2">
                   <div className="flex items-center justify-between">
                     <Label htmlFor="password">Password</Label>
-                    <a href="#" className="text-sm text-blue-600 hover:text-blue-800">
+                    <Link 
+                      to="/reset-password" 
+                      className="text-sm text-blue-600 hover:text-blue-800"
+                    >
                       Forgot password?
-                    </a>
+                    </Link>
                   </div>
                   <Input
                     id="password"

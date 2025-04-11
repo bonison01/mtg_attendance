@@ -1,239 +1,334 @@
 
-import React, { createContext, useContext, useState, useEffect } from 'react';
-import { Employee, AttendanceRecord } from '../lib/types';
-import { mockEmployees, mockAttendance } from '../lib/mockData';
-import { toast } from "@/components/ui/use-toast";
+import React, { createContext, useContext, useEffect, useState } from 'react';
+import { Employee, AttendanceRecord } from '@/lib/types';
+import { supabase } from '@/integrations/supabase/client';
+import { useToast } from '@/components/ui/use-toast';
+import { subscribeToAttendanceChanges, subscribeToEmployeeChanges, unsubscribeFromChannel } from '@/services/realtimeService';
 
-interface AttendanceContextType {
+type AttendanceContextType = {
   employees: Employee[];
   attendanceRecords: AttendanceRecord[];
-  addEmployee: (employee: Omit<Employee, 'id'>) => void;
-  updateEmployee: (employee: Employee) => void;
-  removeEmployee: (id: string) => void;
-  registerFingerprint: (employeeId: string, fingerprintData: string) => void;
-  clockIn: (employeeId: string) => void;
-  clockOut: (employeeId: string) => void;
-  getEmployeeById: (id: string) => Employee | undefined;
-  getAttendanceByEmployeeId: (id: string) => AttendanceRecord[];
-  getTodayAttendance: (id: string) => AttendanceRecord | undefined;
-}
+  addEmployee: (employee: Omit<Employee, 'id'>) => Promise<string | undefined>;
+  removeEmployee: (id: string) => Promise<void>;
+  updateEmployee: (id: string, employee: Partial<Employee>) => Promise<void>;
+  clockIn: (employeeId: string) => Promise<void>;
+  clockOut: (employeeId: string) => Promise<void>;
+  getTodayAttendance: (employeeId: string) => AttendanceRecord | null;
+  resetPassword: (email: string, dateOfBirth: string) => Promise<boolean>;
+  loading: boolean;
+};
 
 const AttendanceContext = createContext<AttendanceContextType | undefined>(undefined);
 
 export const AttendanceProvider: React.FC<{ children: React.ReactNode }> = ({ children }) => {
   const [employees, setEmployees] = useState<Employee[]>([]);
   const [attendanceRecords, setAttendanceRecords] = useState<AttendanceRecord[]>([]);
+  const [loading, setLoading] = useState(true);
+  const { toast } = useToast();
 
-  // Initialize with mock data
+  // Load initial data
   useEffect(() => {
-    setEmployees(mockEmployees);
-    setAttendanceRecords(mockAttendance);
+    const fetchData = async () => {
+      setLoading(true);
+      
+      try {
+        // Fetch employees
+        const { data: employeesData, error: employeesError } = await supabase
+          .from('employees')
+          .select('*');
+          
+        if (employeesError) throw employeesError;
+        setEmployees(employeesData);
+        
+        // Fetch attendance records
+        const { data: attendanceData, error: attendanceError } = await supabase
+          .from('attendance_records')
+          .select('*');
+          
+        if (attendanceError) throw attendanceError;
+        setAttendanceRecords(attendanceData);
+      } catch (error: any) {
+        toast({
+          variant: 'destructive',
+          title: 'Error loading data',
+          description: error.message,
+        });
+      } finally {
+        setLoading(false);
+      }
+    };
+    
+    fetchData();
+  }, [toast]);
+
+  // Set up real-time listeners
+  useEffect(() => {
+    const employeeChannel = subscribeToEmployeeChanges((payload) => {
+      const { eventType, new: newRecord, old: oldRecord } = payload;
+      
+      if (eventType === 'INSERT') {
+        setEmployees(prev => [...prev, newRecord as Employee]);
+      } else if (eventType === 'UPDATE') {
+        setEmployees(prev => prev.map(emp => 
+          emp.id === newRecord.id ? { ...emp, ...newRecord } : emp
+        ));
+      } else if (eventType === 'DELETE') {
+        setEmployees(prev => prev.filter(emp => emp.id !== oldRecord.id));
+      }
+    });
+    
+    const attendanceChannel = subscribeToAttendanceChanges((payload) => {
+      const { eventType, new: newRecord, old: oldRecord } = payload;
+      
+      if (eventType === 'INSERT') {
+        setAttendanceRecords(prev => [...prev, newRecord as AttendanceRecord]);
+      } else if (eventType === 'UPDATE') {
+        setAttendanceRecords(prev => prev.map(record => 
+          record.id === newRecord.id ? { ...record, ...newRecord } : record
+        ));
+      } else if (eventType === 'DELETE') {
+        setAttendanceRecords(prev => prev.filter(record => record.id !== oldRecord.id));
+      }
+    });
+    
+    return () => {
+      unsubscribeFromChannel(employeeChannel);
+      unsubscribeFromChannel(attendanceChannel);
+    };
   }, []);
 
-  // Get today's date in YYYY-MM-DD format
-  const todayStr = new Date().toISOString().split('T')[0];
-
-  const addEmployee = (employee: Omit<Employee, 'id'>) => {
-    const newId = `emp_${Date.now()}`;
-    const newEmployee = {
-      ...employee,
-      id: newId,
-    };
-    setEmployees([...employees, newEmployee]);
-    toast({
-      title: "Employee Added",
-      description: `${employee.name} has been successfully added.`,
-    });
-  };
-
-  const updateEmployee = (employee: Employee) => {
-    setEmployees(employees.map(e => e.id === employee.id ? employee : e));
-    toast({
-      title: "Employee Updated",
-      description: `${employee.name}'s information has been updated.`,
-    });
-  };
-
-  const removeEmployee = (id: string) => {
-    const employee = employees.find(e => e.id === id);
-    setEmployees(employees.filter(e => e.id !== id));
-    if (employee) {
+  const addEmployee = async (employee: Omit<Employee, 'id'>): Promise<string | undefined> => {
+    try {
+      const { data, error } = await supabase
+        .from('employees')
+        .insert(employee)
+        .select()
+        .single();
+        
+      if (error) throw error;
+      
       toast({
-        title: "Employee Removed",
-        description: `${employee.name} has been removed from the system.`,
-        variant: "destructive",
+        title: 'Employee added',
+        description: `${employee.name} has been successfully registered.`,
+      });
+      
+      return data?.id;
+    } catch (error: any) {
+      toast({
+        variant: 'destructive',
+        title: 'Failed to add employee',
+        description: error.message,
+      });
+      return undefined;
+    }
+  };
+
+  const removeEmployee = async (id: string): Promise<void> => {
+    try {
+      const { error } = await supabase
+        .from('employees')
+        .delete()
+        .eq('id', id);
+        
+      if (error) throw error;
+      
+      toast({
+        title: 'Employee removed',
+        description: 'Employee has been successfully removed.',
+      });
+    } catch (error: any) {
+      toast({
+        variant: 'destructive',
+        title: 'Failed to remove employee',
+        description: error.message,
       });
     }
   };
 
-  const registerFingerprint = (employeeId: string, fingerprintData: string) => {
-    setEmployees(employees.map(emp => 
-      emp.id === employeeId ? { ...emp, fingerprint: fingerprintData } : emp
-    ));
-    const employee = employees.find(e => e.id === employeeId);
-    if (employee) {
+  const updateEmployee = async (id: string, employee: Partial<Employee>): Promise<void> => {
+    try {
+      const { error } = await supabase
+        .from('employees')
+        .update(employee)
+        .eq('id', id);
+        
+      if (error) throw error;
+      
       toast({
-        title: "Fingerprint Enrolled",
-        description: `${employee.name}'s fingerprint has been successfully registered.`,
+        title: 'Employee updated',
+        description: 'Employee information has been updated.',
+      });
+    } catch (error: any) {
+      toast({
+        variant: 'destructive',
+        title: 'Failed to update employee',
+        description: error.message,
       });
     }
   };
 
-  const getEmployeeById = (id: string) => {
-    return employees.find(e => e.id === id);
-  };
-
-  const getAttendanceByEmployeeId = (id: string) => {
-    return attendanceRecords.filter(record => record.employeeId === id);
-  };
-
-  const getTodayAttendance = (id: string) => {
-    return attendanceRecords.find(record => record.employeeId === id && record.date === todayStr);
-  };
-
-  const clockIn = (employeeId: string) => {
-    const now = new Date();
-    const timeStr = now.toLocaleTimeString('en-US', { hour12: false });
-    const employee = employees.find(e => e.id === employeeId);
-    
-    // Check if employee exists and has registered fingerprint
-    if (!employee) {
+  const clockIn = async (employeeId: string): Promise<void> => {
+    try {
+      const today = new Date().toISOString().split('T')[0];
+      const now = new Date().toLocaleTimeString();
+      
+      // Check if there's already a record for today
+      const { data: existingRecords, error: fetchError } = await supabase
+        .from('attendance_records')
+        .select('*')
+        .eq('employee_id', employeeId)
+        .eq('date', today);
+        
+      if (fetchError) throw fetchError;
+      
+      if (existingRecords && existingRecords.length > 0) {
+        // Update existing record
+        const { error } = await supabase
+          .from('attendance_records')
+          .update({ 
+            time_in: now,
+            status: new Date().getHours() >= 9 ? 'late' : 'present'
+          })
+          .eq('id', existingRecords[0].id);
+          
+        if (error) throw error;
+      } else {
+        // Create new record
+        const { error } = await supabase
+          .from('attendance_records')
+          .insert({
+            employee_id: employeeId,
+            date: today,
+            time_in: now,
+            status: new Date().getHours() >= 9 ? 'late' : 'present'
+          });
+          
+        if (error) throw error;
+      }
+      
       toast({
-        title: "Error",
-        description: "Employee not found.",
-        variant: "destructive",
+        title: 'Clock In',
+        description: `Clocked in at ${now}`,
       });
-      return;
-    }
-    
-    if (!employee.fingerprint) {
+    } catch (error: any) {
       toast({
-        title: "Fingerprint Required",
-        description: "Please register your fingerprint first.",
-        variant: "destructive",
+        variant: 'destructive',
+        title: 'Clock In Failed',
+        description: error.message,
       });
-      return;
     }
+  };
 
-    // Check if already clocked in today
-    const existingRecord = attendanceRecords.find(
-      r => r.employeeId === employeeId && r.date === todayStr
+  const clockOut = async (employeeId: string): Promise<void> => {
+    try {
+      const today = new Date().toISOString().split('T')[0];
+      const now = new Date().toLocaleTimeString();
+      
+      // Find today's record
+      const { data, error: fetchError } = await supabase
+        .from('attendance_records')
+        .select('*')
+        .eq('employee_id', employeeId)
+        .eq('date', today)
+        .maybeSingle();
+        
+      if (fetchError) throw fetchError;
+      
+      if (!data) {
+        throw new Error('No clock-in record found for today');
+      }
+      
+      // Update with clock-out time
+      const { error } = await supabase
+        .from('attendance_records')
+        .update({ time_out: now })
+        .eq('id', data.id);
+        
+      if (error) throw error;
+      
+      toast({
+        title: 'Clock Out',
+        description: `Clocked out at ${now}`,
+      });
+    } catch (error: any) {
+      toast({
+        variant: 'destructive',
+        title: 'Clock Out Failed',
+        description: error.message,
+      });
+    }
+  };
+
+  const getTodayAttendance = (employeeId: string): AttendanceRecord | null => {
+    const today = new Date().toISOString().split('T')[0];
+    const record = attendanceRecords.find(
+      (record) => record.employeeId === employeeId && record.date === today
     );
-
-    if (existingRecord && existingRecord.timeIn) {
-      toast({
-        title: "Already Clocked In",
-        description: `${employee.name} has already clocked in at ${existingRecord.timeIn}`,
-        variant: "destructive",
-      });
-      return;
-    }
-
-    // Calculate if late (after 9:00)
-    const isLate = now.getHours() >= 9 && (now.getHours() > 9 || now.getMinutes() > 0);
-    
-    if (existingRecord) {
-      // Update existing record
-      setAttendanceRecords(attendanceRecords.map(record => 
-        record.id === existingRecord.id 
-        ? { ...record, timeIn: timeStr, status: isLate ? 'late' : 'present' }
-        : record
-      ));
-    } else {
-      // Create new record
-      const newRecord: AttendanceRecord = {
-        id: `att_${Date.now()}`,
-        employeeId,
-        date: todayStr,
-        timeIn: timeStr,
-        status: isLate ? 'late' : 'present',
-        note: isLate ? 'Late arrival' : '',
-      };
-      setAttendanceRecords([...attendanceRecords, newRecord]);
-    }
-
-    toast({
-      title: isLate ? "Late Check-In" : "Check-In Successful",
-      description: `${employee.name} clocked in at ${timeStr}`,
-      variant: isLate ? "default" : "default",
-    });
+    return record || null;
   };
 
-  const clockOut = (employeeId: string) => {
-    const now = new Date();
-    const timeStr = now.toLocaleTimeString('en-US', { hour12: false });
-    const employee = employees.find(e => e.id === employeeId);
-    
-    if (!employee) {
-      toast({
-        title: "Error",
-        description: "Employee not found.",
-        variant: "destructive",
+  const resetPassword = async (email: string, dateOfBirth: string): Promise<boolean> => {
+    try {
+      // First, find the employee by email
+      const { data: employee, error: employeeError } = await supabase
+        .from('employees')
+        .select('*')
+        .eq('email', email)
+        .single();
+        
+      if (employeeError) throw employeeError;
+      
+      // Check if date of birth matches
+      const employeeDOB = employee.date_of_birth ? new Date(employee.date_of_birth).toISOString().split('T')[0] : null;
+      const inputDOB = new Date(dateOfBirth).toISOString().split('T')[0];
+      
+      if (!employeeDOB || employeeDOB !== inputDOB) {
+        toast({
+          variant: 'destructive',
+          title: 'Verification Failed',
+          description: 'Date of birth does not match our records',
+        });
+        return false;
+      }
+      
+      // If verification passes, send password recovery email
+      const { error } = await supabase.auth.resetPasswordForEmail(email, {
+        redirectTo: window.location.origin + '/reset-password',
       });
-      return;
-    }
-    
-    if (!employee.fingerprint) {
+      
+      if (error) throw error;
+      
       toast({
-        title: "Fingerprint Required",
-        description: "Please register your fingerprint first.",
-        variant: "destructive",
+        title: 'Password Reset Email Sent',
+        description: 'Check your email for the password reset link',
       });
-      return;
-    }
-
-    // Find today's record
-    const existingRecord = attendanceRecords.find(
-      r => r.employeeId === employeeId && r.date === todayStr
-    );
-
-    if (!existingRecord || !existingRecord.timeIn) {
+      
+      return true;
+    } catch (error: any) {
       toast({
-        title: "Error",
-        description: "You must clock in before clocking out.",
-        variant: "destructive",
+        variant: 'destructive',
+        title: 'Password Reset Failed',
+        description: error.message,
       });
-      return;
+      return false;
     }
-
-    if (existingRecord.timeOut) {
-      toast({
-        title: "Already Clocked Out",
-        description: `${employee.name} has already clocked out at ${existingRecord.timeOut}`,
-        variant: "destructive",
-      });
-      return;
-    }
-
-    // Update record with clock-out time
-    setAttendanceRecords(attendanceRecords.map(record => 
-      record.id === existingRecord.id 
-      ? { ...record, timeOut: timeStr }
-      : record
-    ));
-
-    toast({
-      title: "Check-Out Successful",
-      description: `${employee.name} clocked out at ${timeStr}`,
-    });
-  };
-
-  const value = {
-    employees,
-    attendanceRecords,
-    addEmployee,
-    updateEmployee,
-    removeEmployee,
-    registerFingerprint,
-    clockIn,
-    clockOut,
-    getEmployeeById,
-    getAttendanceByEmployeeId,
-    getTodayAttendance
   };
 
   return (
-    <AttendanceContext.Provider value={value}>
+    <AttendanceContext.Provider
+      value={{
+        employees,
+        attendanceRecords,
+        addEmployee,
+        removeEmployee,
+        updateEmployee,
+        clockIn,
+        clockOut,
+        getTodayAttendance,
+        resetPassword,
+        loading,
+      }}
+    >
       {children}
     </AttendanceContext.Provider>
   );

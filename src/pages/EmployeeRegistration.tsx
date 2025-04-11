@@ -1,303 +1,301 @@
 
 import React, { useState } from 'react';
 import { useNavigate } from 'react-router-dom';
-import {
-  Card,
-  CardContent,
-  CardDescription,
-  CardFooter,
-  CardHeader,
-  CardTitle,
-} from "@/components/ui/card";
-import { Input } from '@/components/ui/input';
-import { Label } from '@/components/ui/label';
+import { z } from 'zod';
+import { useForm } from 'react-hook-form';
+import { zodResolver } from '@hookform/resolvers/zod';
+import { 
+  Card, 
+  CardContent, 
+  CardDescription, 
+  CardHeader, 
+  CardTitle 
+} from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import {
-  Select,
-  SelectContent,
-  SelectItem,
-  SelectTrigger,
-  SelectValue,
-} from "@/components/ui/select";
-import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
+  Form,
+  FormControl,
+  FormDescription,
+  FormField,
+  FormItem,
+  FormLabel,
+  FormMessage,
+} from "@/components/ui/form";
+import { Input } from '@/components/ui/input';
+import { Calendar } from '@/components/ui/calendar';
+import {
+  Popover,
+  PopoverContent,
+  PopoverTrigger,
+} from '@/components/ui/popover';
+import { format } from 'date-fns';
+import { CalendarIcon, Save } from 'lucide-react';
 import { useAttendance } from '@/contexts/AttendanceContext';
-import { Fingerprint, UserPlus, Check } from 'lucide-react';
+import { cn } from '@/lib/utils';
+
+const formSchema = z.object({
+  name: z.string().min(2, {
+    message: "Name must be at least 2 characters.",
+  }),
+  email: z.string().email({
+    message: "Please enter a valid email.",
+  }),
+  phoneNumber: z.string().min(10, {
+    message: "Please enter a valid phone number.",
+  }),
+  position: z.string().min(2, {
+    message: "Position must be at least 2 characters.",
+  }),
+  department: z.string().min(2, {
+    message: "Department must be at least 2 characters.",
+  }),
+  joinDate: z.date({
+    required_error: "Please select a join date.",
+  }),
+  dateOfBirth: z.date({
+    required_error: "Please select a date of birth.",
+  }),
+});
 
 const EmployeeRegistration = () => {
+  const [isSubmitting, setIsSubmitting] = useState(false);
   const navigate = useNavigate();
-  const { addEmployee, registerFingerprint } = useAttendance();
-  const [currentStep, setCurrentStep] = useState<'details' | 'fingerprint'>('details');
-  const [enrollmentStage, setEnrollmentStage] = useState(0);
-  const [isEnrolling, setIsEnrolling] = useState(false);
+  const { addEmployee } = useAttendance();
   
-  // Form state
-  const [formData, setFormData] = useState({
-    name: '',
-    position: '',
-    department: '',
-    email: '',
-    phoneNumber: '',
-    imageUrl: '',
+  const form = useForm<z.infer<typeof formSchema>>({
+    resolver: zodResolver(formSchema),
+    defaultValues: {
+      name: "",
+      email: "",
+      phoneNumber: "",
+      position: "",
+      department: "",
+    },
   });
-  
-  const departments = ['Engineering', 'Product', 'Design', 'Marketing', 'Human Resources', 'Finance', 'Operations'];
-  
-  const handleChange = (e: React.ChangeEvent<HTMLInputElement>) => {
-    const { name, value } = e.target;
-    setFormData({ ...formData, [name]: value });
-  };
-  
-  const handleSelectChange = (field: string) => (value: string) => {
-    setFormData({ ...formData, [field]: value });
-  };
-  
-  const handleDetailsSubmit = () => {
-    setCurrentStep('fingerprint');
-  };
-  
-  const handleFingerprintEnroll = () => {
-    setIsEnrolling(true);
+
+  const onSubmit = async (values: z.infer<typeof formSchema>) => {
+    setIsSubmitting(true);
     
-    // Simulate fingerprint enrollment process
-    setTimeout(() => {
-      setEnrollmentStage(1);
-      setTimeout(() => {
-        setEnrollmentStage(2);
-        setTimeout(() => {
-          setEnrollmentStage(3);
-          setIsEnrolling(false);
-          
-          // Create a unique fingerprint ID (in a real app, this would be secure biometric data)
-          const fingerprintId = `fp_${Date.now()}`;
-          
-          // Register the new employee with fingerprint
-          const newEmployee = {
-            ...formData,
-            joinDate: new Date().toISOString().split('T')[0],
-            fingerprint: fingerprintId
-          };
-          
-          addEmployee(newEmployee);
-          
-          // Navigate to employees page after successful registration
-          setTimeout(() => navigate('/employees'), 1500);
-        }, 2000);
-      }, 2000);
-    }, 2000);
+    try {
+      const employee = {
+        name: values.name,
+        email: values.email,
+        phoneNumber: values.phoneNumber,
+        position: values.position,
+        department: values.department,
+        joinDate: format(values.joinDate, "yyyy-MM-dd"),
+        date_of_birth: format(values.dateOfBirth, "yyyy-MM-dd"),
+      };
+      
+      const employeeId = await addEmployee(employee);
+      
+      if (employeeId) {
+        navigate('/employees');
+      }
+    } finally {
+      setIsSubmitting(false);
+    }
   };
   
   return (
-    <div className="max-w-3xl mx-auto">
+    <div>
       <h1 className="text-3xl font-bold mb-6">Register New Employee</h1>
       
-      <Tabs 
-        defaultValue={currentStep} 
-        value={currentStep} 
-        className="space-y-4"
-        onValueChange={(value) => setCurrentStep(value as 'details' | 'fingerprint')}
-      >
-        <TabsList className="grid w-full grid-cols-2">
-          <TabsTrigger value="details" disabled={currentStep === 'fingerprint'}>
-            1. Employee Details
-          </TabsTrigger>
-          <TabsTrigger value="fingerprint" disabled={currentStep === 'details'}>
-            2. Fingerprint Enrollment
-          </TabsTrigger>
-        </TabsList>
-        
-        <TabsContent value="details">
-          <Card>
-            <CardHeader>
-              <CardTitle>Personal Information</CardTitle>
-              <CardDescription>
-                Enter the details of the new employee
-              </CardDescription>
-            </CardHeader>
-            <CardContent className="space-y-4">
-              <div className="grid grid-cols-1 gap-4 md:grid-cols-2">
-                <div className="space-y-2">
-                  <Label htmlFor="name">Full Name</Label>
-                  <Input
-                    id="name"
-                    name="name"
-                    value={formData.name}
-                    onChange={handleChange}
-                    placeholder="John Doe"
-                    required
-                  />
-                </div>
+      <Card className="max-w-2xl mx-auto">
+        <CardHeader>
+          <CardTitle>Employee Information</CardTitle>
+          <CardDescription>
+            Enter the details of the new employee to register them in the system.
+          </CardDescription>
+        </CardHeader>
+        <CardContent>
+          <Form {...form}>
+            <form onSubmit={form.handleSubmit(onSubmit)} className="space-y-6">
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                <FormField
+                  control={form.control}
+                  name="name"
+                  render={({ field }) => (
+                    <FormItem>
+                      <FormLabel>Full Name</FormLabel>
+                      <FormControl>
+                        <Input placeholder="John Doe" {...field} />
+                      </FormControl>
+                      <FormMessage />
+                    </FormItem>
+                  )}
+                />
                 
-                <div className="space-y-2">
-                  <Label htmlFor="email">Email Address</Label>
-                  <Input
-                    id="email"
-                    name="email"
-                    type="email"
-                    value={formData.email}
-                    onChange={handleChange}
-                    placeholder="john.doe@company.com"
-                    required
-                  />
-                </div>
+                <FormField
+                  control={form.control}
+                  name="email"
+                  render={({ field }) => (
+                    <FormItem>
+                      <FormLabel>Email Address</FormLabel>
+                      <FormControl>
+                        <Input type="email" placeholder="john.doe@example.com" {...field} />
+                      </FormControl>
+                      <FormMessage />
+                    </FormItem>
+                  )}
+                />
                 
-                <div className="space-y-2">
-                  <Label htmlFor="phoneNumber">Phone Number</Label>
-                  <Input
-                    id="phoneNumber"
-                    name="phoneNumber"
-                    value={formData.phoneNumber}
-                    onChange={handleChange}
-                    placeholder="(555) 123-4567"
-                  />
-                </div>
+                <FormField
+                  control={form.control}
+                  name="phoneNumber"
+                  render={({ field }) => (
+                    <FormItem>
+                      <FormLabel>Phone Number</FormLabel>
+                      <FormControl>
+                        <Input placeholder="+1 (555) 123-4567" {...field} />
+                      </FormControl>
+                      <FormMessage />
+                    </FormItem>
+                  )}
+                />
                 
-                <div className="space-y-2">
-                  <Label htmlFor="position">Position</Label>
-                  <Input
-                    id="position"
-                    name="position"
-                    value={formData.position}
-                    onChange={handleChange}
-                    placeholder="Software Engineer"
-                    required
-                  />
-                </div>
+                <FormField
+                  control={form.control}
+                  name="position"
+                  render={({ field }) => (
+                    <FormItem>
+                      <FormLabel>Position</FormLabel>
+                      <FormControl>
+                        <Input placeholder="Software Engineer" {...field} />
+                      </FormControl>
+                      <FormMessage />
+                    </FormItem>
+                  )}
+                />
                 
-                <div className="space-y-2">
-                  <Label htmlFor="department">Department</Label>
-                  <Select
-                    value={formData.department}
-                    onValueChange={handleSelectChange('department')}
-                  >
-                    <SelectTrigger>
-                      <SelectValue placeholder="Select a department" />
-                    </SelectTrigger>
-                    <SelectContent>
-                      {departments.map((dept) => (
-                        <SelectItem key={dept} value={dept}>
-                          {dept}
-                        </SelectItem>
-                      ))}
-                    </SelectContent>
-                  </Select>
-                </div>
+                <FormField
+                  control={form.control}
+                  name="department"
+                  render={({ field }) => (
+                    <FormItem>
+                      <FormLabel>Department</FormLabel>
+                      <FormControl>
+                        <Input placeholder="Engineering" {...field} />
+                      </FormControl>
+                      <FormMessage />
+                    </FormItem>
+                  )}
+                />
                 
-                <div className="space-y-2">
-                  <Label htmlFor="imageUrl">Profile Image URL (Optional)</Label>
-                  <Input
-                    id="imageUrl"
-                    name="imageUrl"
-                    value={formData.imageUrl}
-                    onChange={handleChange}
-                    placeholder="https://example.com/image.jpg"
-                  />
-                </div>
-              </div>
-            </CardContent>
-            <CardFooter>
-              <Button 
-                className="ml-auto" 
-                onClick={handleDetailsSubmit}
-                disabled={!formData.name || !formData.position || !formData.department || !formData.email}
-              >
-                Next: Fingerprint Enrollment
-              </Button>
-            </CardFooter>
-          </Card>
-        </TabsContent>
-        
-        <TabsContent value="fingerprint">
-          <Card>
-            <CardHeader>
-              <CardTitle>Fingerprint Enrollment</CardTitle>
-              <CardDescription>
-                Register employee's fingerprint for attendance tracking
-              </CardDescription>
-            </CardHeader>
-            <CardContent className="flex flex-col items-center py-8">
-              <div className="text-center mb-6">
-                <h3 className="text-xl font-semibold mb-2">{formData.name}</h3>
-                <p className="text-muted-foreground">{formData.position} • {formData.department}</p>
+                <FormField
+                  control={form.control}
+                  name="joinDate"
+                  render={({ field }) => (
+                    <FormItem className="flex flex-col">
+                      <FormLabel>Join Date</FormLabel>
+                      <Popover>
+                        <PopoverTrigger asChild>
+                          <FormControl>
+                            <Button
+                              variant={"outline"}
+                              className={cn(
+                                "w-full pl-3 text-left font-normal",
+                                !field.value && "text-muted-foreground"
+                              )}
+                            >
+                              {field.value ? (
+                                format(field.value, "PPP")
+                              ) : (
+                                <span>Pick a date</span>
+                              )}
+                              <CalendarIcon className="ml-auto h-4 w-4 opacity-50" />
+                            </Button>
+                          </FormControl>
+                        </PopoverTrigger>
+                        <PopoverContent className="w-auto p-0" align="start">
+                          <Calendar
+                            mode="single"
+                            selected={field.value}
+                            onSelect={field.onChange}
+                            disabled={(date) =>
+                              date > new Date() || date < new Date("1900-01-01")
+                            }
+                            initialFocus
+                          />
+                        </PopoverContent>
+                      </Popover>
+                      <FormMessage />
+                    </FormItem>
+                  )}
+                />
+
+                <FormField
+                  control={form.control}
+                  name="dateOfBirth"
+                  render={({ field }) => (
+                    <FormItem className="flex flex-col">
+                      <FormLabel>Date of Birth</FormLabel>
+                      <Popover>
+                        <PopoverTrigger asChild>
+                          <FormControl>
+                            <Button
+                              variant={"outline"}
+                              className={cn(
+                                "w-full pl-3 text-left font-normal",
+                                !field.value && "text-muted-foreground"
+                              )}
+                            >
+                              {field.value ? (
+                                format(field.value, "PPP")
+                              ) : (
+                                <span>Pick a date</span>
+                              )}
+                              <CalendarIcon className="ml-auto h-4 w-4 opacity-50" />
+                            </Button>
+                          </FormControl>
+                        </PopoverTrigger>
+                        <PopoverContent className="w-auto p-0" align="start">
+                          <Calendar
+                            mode="single"
+                            selected={field.value}
+                            onSelect={field.onChange}
+                            disabled={(date) =>
+                              date > new Date() || date < new Date("1900-01-01")
+                            }
+                            initialFocus
+                          />
+                        </PopoverContent>
+                      </Popover>
+                      <FormDescription>
+                        Used for password reset verification
+                      </FormDescription>
+                      <FormMessage />
+                    </FormItem>
+                  )}
+                />
               </div>
               
-              <div className="my-6 relative">
-                <div className={`fingerprint-scanner ${isEnrolling ? 'animate-pulse' : ''}`}>
-                  <Fingerprint className="fingerprint-image text-white" />
-                </div>
-                
-                {enrollmentStage > 0 && (
-                  <div className="absolute -right-2 -top-2 bg-green-500 text-white rounded-full p-1">
-                    <Check className="h-4 w-4" />
-                  </div>
-                )}
-              </div>
-              
-              <div className="w-full max-w-xs">
-                <div className="text-center mb-6">
-                  {enrollmentStage === 0 && !isEnrolling && (
-                    <p>Click start to begin fingerprint enrollment</p>
-                  )}
-                  
-                  {isEnrolling && enrollmentStage === 0 && (
-                    <p className="animate-pulse">Place finger on the scanner</p>
-                  )}
-                  
-                  {enrollmentStage === 1 && (
-                    <p className="animate-pulse">Scanning... keep finger on scanner</p>
-                  )}
-                  
-                  {enrollmentStage === 2 && (
-                    <p className="animate-pulse">Processing...</p>
-                  )}
-                  
-                  {enrollmentStage === 3 && (
-                    <p className="text-green-600 font-medium">Enrollment successful!</p>
-                  )}
-                </div>
-                
-                <progress 
-                  className="w-full [&::-webkit-progress-bar]:rounded-full [&::-webkit-progress-value]:rounded-full [&::-webkit-progress-bar]:bg-secondary [&::-webkit-progress-value]:bg-primary h-2"
-                  value={enrollmentStage * 33.3} 
-                  max="100"
-                ></progress>
-                
-                <div className="flex justify-between text-xs text-muted-foreground mt-1">
-                  <span>Start</span>
-                  <span>Processing</span>
-                  <span>Complete</span>
-                </div>
-              </div>
-            </CardContent>
-            <CardFooter className="flex justify-between">
-              <Button 
-                variant="outline" 
-                onClick={() => setCurrentStep('details')}
-                disabled={isEnrolling || enrollmentStage > 0}
-              >
-                Back
-              </Button>
-              {enrollmentStage < 3 ? (
+              <div className="flex justify-end space-x-2">
                 <Button 
-                  onClick={handleFingerprintEnroll}
-                  disabled={isEnrolling}
-                  className="gap-2"
-                >
-                  <UserPlus className="h-4 w-4" />
-                  {enrollmentStage === 0 ? 'Start Enrollment' : 'Retry'}
-                </Button>
-              ) : (
-                <Button 
+                  type="button" 
+                  variant="outline" 
                   onClick={() => navigate('/employees')}
-                  className="gap-2"
                 >
-                  <Check className="h-4 w-4" />
-                  Complete Registration
+                  Cancel
                 </Button>
-              )}
-            </CardFooter>
-          </Card>
-        </TabsContent>
-      </Tabs>
+                <Button type="submit" disabled={isSubmitting}>
+                  {isSubmitting ? (
+                    <>
+                      <span className="mr-2 h-4 w-4 animate-spin rounded-full border-2 border-b-transparent"></span>
+                      Saving...
+                    </>
+                  ) : (
+                    <>
+                      <Save className="mr-2 h-4 w-4" />
+                      Register Employee
+                    </>
+                  )}
+                </Button>
+              </div>
+            </form>
+          </Form>
+        </CardContent>
+      </Card>
     </div>
   );
 };
