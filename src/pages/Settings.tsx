@@ -1,5 +1,5 @@
 
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import {
   Card,
   CardContent,
@@ -13,11 +13,16 @@ import { Label } from "@/components/ui/label";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Switch } from "@/components/ui/switch";
 import { useToast } from "@/components/ui/use-toast";
+import { Copy, RefreshCcw } from "lucide-react";
+import { getDailyCode } from '@/utils/codeGenerator';
+import { subscribeToAttendanceChanges } from '@/services/realtimeService';
 
 const Settings = () => {
   const { toast } = useToast();
   const [companyName, setCompanyName] = useState('BioPulse Inc.');
   const [adminEmail, setAdminEmail] = useState('admin@company.com');
+  const [verificationCode, setVerificationCode] = useState('');
+  const [realtimeAttendance, setRealtimeAttendance] = useState(0);
   
   // Notification settings
   const [emailNotifications, setEmailNotifications] = useState(true);
@@ -28,6 +33,50 @@ const Settings = () => {
   const [workStartTime, setWorkStartTime] = useState('09:00');
   const [workEndTime, setWorkEndTime] = useState('17:00');
   const [lateThreshold, setLateThreshold] = useState('15');
+
+  // Initialize verification code on component mount
+  useEffect(() => {
+    const code = getDailyCode();
+    setVerificationCode(code);
+    
+    // Set up realtime attendance tracking
+    const channel = subscribeToAttendanceChanges((payload) => {
+      // Update attendance count in real-time
+      const today = new Date().toISOString().split('T')[0];
+      if (payload.new && payload.new.date === today) {
+        setRealtimeAttendance(prev => {
+          // If it's a new record, increment the count
+          if (payload.eventType === 'INSERT') {
+            return prev + 1;
+          }
+          return prev;
+        });
+      }
+    });
+    
+    return () => {
+      if (channel) {
+        channel.unsubscribe();
+      }
+    };
+  }, []);
+  
+  const handleCopyCode = () => {
+    navigator.clipboard.writeText(verificationCode);
+    toast({
+      title: "Code Copied",
+      description: "Verification code has been copied to clipboard.",
+    });
+  };
+  
+  const handleRefreshCode = () => {
+    const code = getDailyCode();
+    setVerificationCode(code);
+    toast({
+      title: "Code Refreshed",
+      description: "Verification code has been refreshed.",
+    });
+  };
   
   const handleSaveGeneral = () => {
     toast({
@@ -55,10 +104,11 @@ const Settings = () => {
       <h1 className="text-3xl font-bold mb-6">Settings</h1>
       
       <Tabs defaultValue="general" className="space-y-6">
-        <TabsList className="grid grid-cols-3 max-w-md">
+        <TabsList className="grid grid-cols-4 max-w-md">
           <TabsTrigger value="general">General</TabsTrigger>
           <TabsTrigger value="notifications">Notifications</TabsTrigger>
           <TabsTrigger value="attendance">Attendance</TabsTrigger>
+          <TabsTrigger value="verification">Verification</TabsTrigger>
         </TabsList>
         
         <TabsContent value="general">
@@ -213,6 +263,66 @@ const Settings = () => {
               
               <div className="flex justify-end">
                 <Button onClick={handleSaveAttendance}>Save Rules</Button>
+              </div>
+            </CardContent>
+          </Card>
+        </TabsContent>
+        
+        <TabsContent value="verification">
+          <Card>
+            <CardHeader>
+              <CardTitle>Daily Verification Code</CardTitle>
+              <CardDescription>
+                This code changes daily and is required for employee clock in/out
+              </CardDescription>
+            </CardHeader>
+            <CardContent className="space-y-6">
+              <div className="bg-gray-100 p-6 rounded-lg text-center">
+                <p className="text-sm text-muted-foreground mb-2">Today's Verification Code</p>
+                <div className="text-3xl font-mono font-bold tracking-wider mb-4">
+                  {verificationCode}
+                </div>
+                <p className="text-xs text-muted-foreground mb-4">
+                  This code will automatically change at midnight
+                </p>
+                <div className="flex justify-center space-x-3">
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    onClick={handleCopyCode}
+                    className="flex items-center gap-2"
+                  >
+                    <Copy className="h-4 w-4" />
+                    Copy Code
+                  </Button>
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    onClick={handleRefreshCode}
+                    className="flex items-center gap-2"
+                  >
+                    <RefreshCcw className="h-4 w-4" />
+                    Refresh
+                  </Button>
+                </div>
+              </div>
+              
+              <div className="bg-blue-50 p-4 rounded-lg">
+                <div className="flex items-start">
+                  <div className="bg-blue-100 rounded-full p-1 mr-3">
+                    <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className="text-blue-600">
+                      <path d="M12 16v-4"></path>
+                      <path d="M12 8h.01"></path>
+                      <circle cx="12" cy="12" r="10"></circle>
+                    </svg>
+                  </div>
+                  <div>
+                    <h4 className="text-sm font-medium text-blue-800">Attendance Status</h4>
+                    <p className="text-xs text-blue-600 mt-1">
+                      {realtimeAttendance} employees have clocked in today
+                    </p>
+                  </div>
+                </div>
               </div>
             </CardContent>
           </Card>
