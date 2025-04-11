@@ -1,21 +1,54 @@
 
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import { supabase } from '@/integrations/supabase/client';
 import { Employee, AttendanceRecord } from '@/lib/types';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar';
-import { Fingerprint, LogIn, LogOut, Search, Check, X } from 'lucide-react';
+import { 
+  Fingerprint, 
+  LogIn, 
+  LogOut, 
+  Search, 
+  Camera, 
+  Hash, 
+  Check, 
+  X,
+  Loader2
+} from 'lucide-react';
 import { Badge } from '@/components/ui/badge';
 import { toast } from 'sonner';
 import { AspectRatio } from '@/components/ui/aspect-ratio';
+import {
+  Dialog,
+  DialogContent,
+  DialogHeader,
+  DialogTitle,
+  DialogDescription,
+  DialogFooter,
+} from '@/components/ui/dialog';
+import { Tabs, TabsList, TabsTrigger, TabsContent } from '@/components/ui/tabs';
 
 const OpenClockInDashboard = () => {
   const [employees, setEmployees] = useState<Employee[]>([]);
   const [attendanceRecords, setAttendanceRecords] = useState<AttendanceRecord[]>([]);
   const [loading, setLoading] = useState(true);
   const [searchTerm, setSearchTerm] = useState('');
+  const [verificationDialogOpen, setVerificationDialogOpen] = useState(false);
+  const [currentEmployeeId, setCurrentEmployeeId] = useState<string | null>(null);
+  const [clockInMode, setClockInMode] = useState<boolean>(true);
+  const [verificationTab, setVerificationTab] = useState<string>('selfie');
+  const [verificationCode, setVerificationCode] = useState<string>('');
+  const [dailyCode, setDailyCode] = useState<string>('');
+  const [isCapturing, setIsCapturing] = useState<boolean>(false);
+  const [capturedImage, setCapturedImage] = useState<string | null>(null);
+  const [fingerprintScanning, setFingerprintScanning] = useState<boolean>(false);
+  const [verificationSuccess, setVerificationSuccess] = useState<boolean | null>(null);
+  const [verifyingInput, setVerifyingInput] = useState<boolean>(false);
+  
+  const videoRef = useRef<HTMLVideoElement>(null);
+  const canvasRef = useRef<HTMLCanvasElement>(null);
 
   useEffect(() => {
     const fetchData = async () => {
@@ -62,6 +95,11 @@ const OpenClockInDashboard = () => {
         }));
         
         setAttendanceRecords(mappedAttendance);
+
+        // Generate a daily random code - normally this would be stored server-side
+        const randomCode = Math.floor(1000 + Math.random() * 9000).toString();
+        setDailyCode(randomCode);
+        
       } catch (error: any) {
         toast.error("Error loading data", {
           description: error.message
@@ -111,6 +149,7 @@ const OpenClockInDashboard = () => {
 
     return () => {
       supabase.removeChannel(channel);
+      stopCamera();
     };
   }, []);
 
@@ -118,17 +157,31 @@ const OpenClockInDashboard = () => {
     return attendanceRecords.find(record => record.employeeId === employeeId);
   };
 
-  const clockIn = async (employeeId: string) => {
+  const initiateClockAction = (employeeId: string, isClockIn: boolean) => {
+    setCurrentEmployeeId(employeeId);
+    setClockInMode(isClockIn);
+    setVerificationDialogOpen(true);
+    setVerificationSuccess(null);
+    setVerificationCode('');
+    setCapturedImage(null);
+    setVerificationTab('selfie');
+  };
+
+  const clockIn = async () => {
+    if (!currentEmployeeId) return;
+    
     try {
       const today = new Date().toISOString().split('T')[0];
       const now = new Date().toLocaleTimeString();
       
       const attendanceData = {
-        employee_id: employeeId,
+        employee_id: currentEmployeeId,
         date: today,
         time_in: now,
         status: new Date().getHours() >= 9 ? 'late' : 'present',
-        note: ''
+        note: verificationTab === 'selfie' ? 'Verified with selfie' : 
+              verificationTab === 'fingerprint' ? 'Verified with fingerprint' : 
+              'Verified with code'
       };
       
       const { data, error } = await supabase
@@ -142,6 +195,8 @@ const OpenClockInDashboard = () => {
       toast.success("Clock In Successful", {
         description: `Clocked in at ${now}`
       });
+      
+      setVerificationDialogOpen(false);
     } catch (error: any) {
       toast.error("Clock In Failed", {
         description: error.message
@@ -149,7 +204,9 @@ const OpenClockInDashboard = () => {
     }
   };
 
-  const clockOut = async (employeeId: string) => {
+  const clockOut = async () => {
+    if (!currentEmployeeId) return;
+    
     try {
       const today = new Date().toISOString().split('T')[0];
       const now = new Date().toLocaleTimeString();
@@ -157,7 +214,7 @@ const OpenClockInDashboard = () => {
       const { data: record, error: findError } = await supabase
         .from('attendance_records')
         .select('*')
-        .eq('employee_id', employeeId)
+        .eq('employee_id', currentEmployeeId)
         .eq('date', today)
         .is('time_out', null)
         .single();
@@ -168,7 +225,13 @@ const OpenClockInDashboard = () => {
       
       const { error: updateError } = await supabase
         .from('attendance_records')
-        .update({ time_out: now })
+        .update({ 
+          time_out: now,
+          note: record.note + ' | Clocked out with ' + 
+                (verificationTab === 'selfie' ? 'selfie' : 
+                verificationTab === 'fingerprint' ? 'fingerprint' : 
+                'code')
+        })
         .eq('id', record.id);
       
       if (updateError) throw updateError;
@@ -176,10 +239,114 @@ const OpenClockInDashboard = () => {
       toast.success("Clock Out Successful", {
         description: `Clocked out at ${now}`
       });
+      
+      setVerificationDialogOpen(false);
     } catch (error: any) {
       toast.error("Clock Out Failed", {
         description: error.message
       });
+    }
+  };
+
+  const startCamera = async () => {
+    setIsCapturing(true);
+    try {
+      if (navigator.mediaDevices && navigator.mediaDevices.getUserMedia) {
+        const stream = await navigator.mediaDevices.getUserMedia({ video: true });
+        if (videoRef.current) {
+          videoRef.current.srcObject = stream;
+          videoRef.current.play();
+        }
+      } else {
+        throw new Error("Camera access not available");
+      }
+    } catch (error) {
+      console.error("Error accessing camera:", error);
+      toast.error("Camera Access Failed", {
+        description: "Could not access your camera. Please check permissions."
+      });
+      setIsCapturing(false);
+    }
+  };
+
+  const stopCamera = () => {
+    if (videoRef.current && videoRef.current.srcObject) {
+      const stream = videoRef.current.srcObject as MediaStream;
+      const tracks = stream.getTracks();
+      tracks.forEach(track => track.stop());
+      videoRef.current.srcObject = null;
+    }
+    setIsCapturing(false);
+  };
+
+  const takePicture = () => {
+    if (!videoRef.current || !canvasRef.current) return;
+    
+    const context = canvasRef.current.getContext('2d');
+    if (!context) return;
+    
+    // Set canvas dimensions to match the video
+    canvasRef.current.width = videoRef.current.videoWidth;
+    canvasRef.current.height = videoRef.current.videoHeight;
+    
+    // Draw the video frame to the canvas
+    context.drawImage(videoRef.current, 0, 0, canvasRef.current.width, canvasRef.current.height);
+    
+    // Convert the canvas to a data URL
+    const dataUrl = canvasRef.current.toDataURL('image/jpeg');
+    setCapturedImage(dataUrl);
+    stopCamera();
+    
+    // In a real app, here is where you would send the image to a server for processing
+    simulateVerification();
+  };
+
+  const simulateFingerprint = () => {
+    setFingerprintScanning(true);
+    setVerificationSuccess(null);
+    
+    // Simulate fingerprint scanning
+    setTimeout(() => {
+      setFingerprintScanning(false);
+      simulateVerification();
+    }, 2000);
+  };
+  
+  const verifyCode = () => {
+    setVerifyingInput(true);
+    setVerificationSuccess(null);
+    
+    // Check if entered code matches daily code
+    setTimeout(() => {
+      setVerifyingInput(false);
+      if (verificationCode === dailyCode) {
+        setVerificationSuccess(true);
+      } else {
+        setVerificationSuccess(false);
+        toast.error("Incorrect Code", {
+          description: "The verification code entered is incorrect."
+        });
+      }
+    }, 1000);
+  };
+  
+  const simulateVerification = () => {
+    setVerifyingInput(true);
+    
+    // Simulate verification process (in real app, this would be an actual verification)
+    setTimeout(() => {
+      setVerifyingInput(false);
+      setVerificationSuccess(true);
+    }, 1500);
+  };
+
+  const completeVerification = () => {
+    if (verificationSuccess) {
+      if (clockInMode) {
+        clockIn();
+      } else {
+        clockOut();
+      }
     }
   };
 
@@ -289,7 +456,7 @@ const OpenClockInDashboard = () => {
                         <div className="grid grid-cols-2 gap-2">
                           <Button 
                             disabled={!!attendanceRecord.timeIn} 
-                            onClick={() => clockIn(employee.id)}
+                            onClick={() => initiateClockAction(employee.id, true)}
                             className="flex items-center gap-1"
                           >
                             <LogIn className="h-4 w-4" />
@@ -298,7 +465,7 @@ const OpenClockInDashboard = () => {
                           <Button
                             variant="outline"
                             disabled={!attendanceRecord.timeIn || !!attendanceRecord.timeOut}
-                            onClick={() => clockOut(employee.id)}
+                            onClick={() => initiateClockAction(employee.id, false)}
                             className="flex items-center gap-1"
                           >
                             <LogOut className="h-4 w-4" />
@@ -312,7 +479,7 @@ const OpenClockInDashboard = () => {
                           <p className="text-sm text-muted-foreground">No attendance record</p>
                         </div>
                         <Button 
-                          onClick={() => clockIn(employee.id)} 
+                          onClick={() => initiateClockAction(employee.id, true)} 
                           className="w-full flex items-center justify-center gap-1"
                         >
                           <LogIn className="h-4 w-4" />
@@ -335,6 +502,192 @@ const OpenClockInDashboard = () => {
           </div>
         )}
       </div>
+
+      {/* Verification Dialog */}
+      <Dialog open={verificationDialogOpen} onOpenChange={setVerificationDialogOpen}>
+        <DialogContent className="sm:max-w-md">
+          <DialogHeader>
+            <DialogTitle>Verify Your Identity</DialogTitle>
+            <DialogDescription>
+              {clockInMode ? 'Complete verification to clock in' : 'Complete verification to clock out'}
+            </DialogDescription>
+          </DialogHeader>
+
+          <div className="py-4">
+            <Tabs value={verificationTab} onValueChange={setVerificationTab}>
+              <TabsList className="grid grid-cols-3 w-full">
+                <TabsTrigger value="selfie" className="flex items-center gap-1">
+                  <Camera className="h-4 w-4" />
+                  Selfie
+                </TabsTrigger>
+                <TabsTrigger value="fingerprint" className="flex items-center gap-1">
+                  <Fingerprint className="h-4 w-4" />
+                  Fingerprint
+                </TabsTrigger>
+                <TabsTrigger value="code" className="flex items-center gap-1">
+                  <Hash className="h-4 w-4" />
+                  Daily Code
+                </TabsTrigger>
+              </TabsList>
+
+              <div className="mt-4 p-4 border rounded-md">
+                <TabsContent value="selfie" className="space-y-4">
+                  {!isCapturing && !capturedImage ? (
+                    <div className="flex flex-col items-center justify-center space-y-4">
+                      <div className="rounded-full bg-muted p-6">
+                        <Camera className="h-10 w-10 text-muted-foreground" />
+                      </div>
+                      <Button onClick={startCamera}>Start Camera</Button>
+                    </div>
+                  ) : capturedImage ? (
+                    <div className="flex flex-col items-center space-y-3">
+                      <div className="relative w-full max-w-sm mx-auto">
+                        <img 
+                          src={capturedImage} 
+                          alt="Captured selfie" 
+                          className="w-full rounded-md border"
+                        />
+                        {verifyingInput && (
+                          <div className="absolute inset-0 bg-black/30 flex items-center justify-center rounded-md">
+                            <Loader2 className="h-8 w-8 text-white animate-spin" />
+                          </div>
+                        )}
+                        {verificationSuccess === true && (
+                          <div className="absolute inset-0 bg-green-500/30 flex items-center justify-center rounded-md">
+                            <Check className="h-16 w-16 text-white" />
+                          </div>
+                        )}
+                        {verificationSuccess === false && (
+                          <div className="absolute inset-0 bg-red-500/30 flex items-center justify-center rounded-md">
+                            <X className="h-16 w-16 text-white" />
+                          </div>
+                        )}
+                      </div>
+                      <div className="flex space-x-2">
+                        <Button 
+                          variant="outline" 
+                          onClick={() => {
+                            setCapturedImage(null);
+                            setVerificationSuccess(null);
+                          }}
+                          disabled={verifyingInput}
+                        >
+                          Retake
+                        </Button>
+                      </div>
+                    </div>
+                  ) : (
+                    <div className="flex flex-col items-center space-y-3">
+                      <div className="relative w-full max-w-sm mx-auto h-[240px] bg-black rounded-md overflow-hidden">
+                        <video 
+                          ref={videoRef} 
+                          className="w-full h-full object-cover"
+                          autoPlay
+                        />
+                      </div>
+                      <div className="flex space-x-2">
+                        <Button variant="outline" onClick={stopCamera}>Cancel</Button>
+                        <Button onClick={takePicture}>Take Picture</Button>
+                      </div>
+                    </div>
+                  )}
+                  <canvas ref={canvasRef} style={{ display: 'none' }} />
+                </TabsContent>
+
+                <TabsContent value="fingerprint" className="space-y-4">
+                  <div className="flex flex-col items-center justify-center space-y-4">
+                    <div className={`relative rounded-full bg-muted p-8 ${fingerprintScanning ? 'animate-pulse' : ''}`}>
+                      <Fingerprint className={`h-16 w-16 ${
+                        verificationSuccess === true ? 'text-green-500' :
+                        verificationSuccess === false ? 'text-red-500' :
+                        'text-muted-foreground'
+                      }`} />
+                      {verifyingInput && (
+                        <div className="absolute inset-0 bg-black/10 rounded-full flex items-center justify-center">
+                          <Loader2 className="h-8 w-8 text-primary animate-spin" />
+                        </div>
+                      )}
+                    </div>
+                    <p className="text-center text-sm text-muted-foreground">
+                      {fingerprintScanning ? 'Scanning fingerprint...' :
+                       verificationSuccess === true ? 'Fingerprint verified!' :
+                       verificationSuccess === false ? 'Fingerprint verification failed' :
+                       'Press the button to scan your fingerprint'}
+                    </p>
+                    {verificationSuccess !== true && (
+                      <Button 
+                        onClick={simulateFingerprint} 
+                        disabled={fingerprintScanning || verifyingInput}
+                      >
+                        {fingerprintScanning ? 
+                         <Loader2 className="h-4 w-4 mr-2 animate-spin" /> : 
+                         <Fingerprint className="h-4 w-4 mr-2" />}
+                        Scan Fingerprint
+                      </Button>
+                    )}
+                  </div>
+                </TabsContent>
+
+                <TabsContent value="code" className="space-y-4">
+                  <div className="flex flex-col items-center justify-center space-y-4">
+                    <div className="rounded-full bg-muted p-6">
+                      <Hash className="h-10 w-10 text-muted-foreground" />
+                    </div>
+                    <p className="text-center text-sm">
+                      Enter today's verification code:
+                    </p>
+                    <div className="w-full max-w-xs">
+                      <Input 
+                        type="text"
+                        placeholder="Enter 4-digit code"
+                        value={verificationCode}
+                        onChange={(e) => setVerificationCode(e.target.value)}
+                        maxLength={4}
+                        className="text-center text-lg"
+                      />
+                    </div>
+                    <div className="relative">
+                      <Button 
+                        onClick={verifyCode} 
+                        disabled={verificationCode.length !== 4 || verifyingInput || verificationSuccess === true}
+                      >
+                        {verifyingInput ? 
+                          <Loader2 className="h-4 w-4 mr-2 animate-spin" /> : 
+                          <Hash className="h-4 w-4 mr-2" />}
+                        Verify Code
+                      </Button>
+                      {verificationSuccess === true && (
+                        <Check className="text-green-500 h-6 w-6 absolute -right-8 top-2" />
+                      )}
+                      {verificationSuccess === false && (
+                        <X className="text-red-500 h-6 w-6 absolute -right-8 top-2" />
+                      )}
+                    </div>
+                  </div>
+                </TabsContent>
+              </div>
+            </Tabs>
+          </div>
+
+          <DialogFooter className="sm:justify-between">
+            <Button 
+              variant="outline" 
+              onClick={() => {
+                setVerificationDialogOpen(false);
+                stopCamera();
+              }}
+            >
+              Cancel
+            </Button>
+            <Button 
+              disabled={!verificationSuccess}
+              onClick={completeVerification}
+            >
+              {clockInMode ? 'Complete Clock In' : 'Complete Clock Out'}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
     </div>
   );
 };
