@@ -9,6 +9,7 @@ export interface Employee {
   email: string;
   phoneNumber: string;
   joinDate: string;
+  date_of_birth?: string; // Added for password reset verification
 }
 
 export interface AttendanceRecord {

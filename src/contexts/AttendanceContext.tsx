@@ -1,4 +1,3 @@
-
 import React, { createContext, useContext, useEffect, useState } from 'react';
 import { Employee, AttendanceRecord } from '@/lib/types';
 import { supabase } from '@/integrations/supabase/client';
@@ -26,20 +25,17 @@ export const AttendanceProvider: React.FC<{ children: React.ReactNode }> = ({ ch
   const [loading, setLoading] = useState(true);
   const { toast } = useToast();
 
-  // Load initial data
   useEffect(() => {
     const fetchData = async () => {
       setLoading(true);
       
       try {
-        // Fetch employees
         const { data: employeeData, error: employeeError } = await supabase
           .from('employees')
           .select('*');
           
         if (employeeError) throw employeeError;
         
-        // Map database data to our Employee type
         const mappedEmployees: Employee[] = employeeData.map((emp: any) => ({
           id: emp.id,
           name: emp.name,
@@ -49,19 +45,18 @@ export const AttendanceProvider: React.FC<{ children: React.ReactNode }> = ({ ch
           department: emp.department || '',
           joinDate: emp.join_date,
           imageUrl: emp.image_url || '',
-          fingerprint: emp.fingerprint || null
+          fingerprint: emp.fingerprint || null,
+          date_of_birth: emp.date_of_birth || null
         }));
         
         setEmployees(mappedEmployees);
         
-        // Fetch attendance records
         const { data: attendanceData, error: attendanceError } = await supabase
           .from('attendance_records')
           .select('*');
         
         if (attendanceError) throw attendanceError;
         
-        // Map database data to our AttendanceRecord type
         const mappedAttendance: AttendanceRecord[] = attendanceData.map((record: any) => ({
           id: record.id,
           employeeId: record.employee_id,
@@ -87,7 +82,6 @@ export const AttendanceProvider: React.FC<{ children: React.ReactNode }> = ({ ch
     fetchData();
   }, [toast]);
 
-  // Set up real-time listeners
   useEffect(() => {
     const employeeChannel = subscribeToEmployeeChanges((payload) => {
       const { eventType, new: newRecord, old: oldRecord } = payload;
@@ -102,7 +96,8 @@ export const AttendanceProvider: React.FC<{ children: React.ReactNode }> = ({ ch
           department: newRecord.department || '',
           joinDate: newRecord.join_date,
           imageUrl: newRecord.image_url || '',
-          fingerprint: newRecord.fingerprint || null
+          fingerprint: newRecord.fingerprint || null,
+          date_of_birth: newRecord.date_of_birth || null
         };
         setEmployees(prev => [...prev, newEmployee]);
       } else if (eventType === 'UPDATE') {
@@ -116,7 +111,8 @@ export const AttendanceProvider: React.FC<{ children: React.ReactNode }> = ({ ch
             department: newRecord.department || '',
             joinDate: newRecord.join_date,
             imageUrl: newRecord.image_url || '',
-            fingerprint: newRecord.fingerprint || null
+            fingerprint: newRecord.fingerprint || null,
+            date_of_birth: newRecord.date_of_birth || null
           } : emp
         ));
       } else if (eventType === 'DELETE') {
@@ -163,7 +159,6 @@ export const AttendanceProvider: React.FC<{ children: React.ReactNode }> = ({ ch
 
   const addEmployee = async (employee: Omit<Employee, 'id'>): Promise<string | undefined> => {
     try {
-      // Map our Employee type to database columns
       const employeeData = {
         name: employee.name,
         email: employee.email,
@@ -223,7 +218,6 @@ export const AttendanceProvider: React.FC<{ children: React.ReactNode }> = ({ ch
 
   const updateEmployee = async (id: string, employee: Partial<Employee>): Promise<void> => {
     try {
-      // Map our Employee type to database columns
       const updateData: any = {};
       
       if (employee.name) updateData.name = employee.name;
@@ -294,7 +288,6 @@ export const AttendanceProvider: React.FC<{ children: React.ReactNode }> = ({ ch
       const today = new Date().toISOString().split('T')[0];
       const now = new Date().toLocaleTimeString();
       
-      // Find today's attendance record for this employee
       const { data, error: findError } = await supabase
         .from('attendance_records')
         .select('*')
@@ -307,7 +300,6 @@ export const AttendanceProvider: React.FC<{ children: React.ReactNode }> = ({ ch
         throw new Error('No clock-in record found for today');
       }
       
-      // Update the record with clock out time
       const { error: updateError } = await supabase
         .from('attendance_records')
         .update({ time_out: now })
@@ -338,7 +330,6 @@ export const AttendanceProvider: React.FC<{ children: React.ReactNode }> = ({ ch
 
   const resetPassword = async (email: string, dateOfBirth: string): Promise<boolean> => {
     try {
-      // First, try to find an employee by email
       const { data: employee, error: employeeError } = await supabase
         .from('employees')
         .select('*')
@@ -354,7 +345,6 @@ export const AttendanceProvider: React.FC<{ children: React.ReactNode }> = ({ ch
         return false;
       }
       
-      // Check if date of birth matches
       const employeeDob = employee.date_of_birth ? new Date(employee.date_of_birth).toISOString().split('T')[0] : null;
       const providedDob = new Date(dateOfBirth).toISOString().split('T')[0];
       
@@ -367,7 +357,6 @@ export const AttendanceProvider: React.FC<{ children: React.ReactNode }> = ({ ch
         return false;
       }
       
-      // Send password recovery email
       const { error } = await supabase.auth.resetPasswordForEmail(email, {
         redirectTo: window.location.origin + '/reset-password',
       });
