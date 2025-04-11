@@ -63,7 +63,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
   const checkUserRole = async (userId: string) => {
     try {
       const { data, error } = await supabase
-        .from('user_profiles')
+        .from('profiles')
         .select('role')
         .eq('id', userId)
         .single();
@@ -110,10 +110,10 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
       if (error) throw error;
       if (!data.user) throw new Error("User creation failed");
       
-      // If admin registration, update role in user_profiles
+      // If admin registration, update role in profiles
       if (isAdmin) {
         const { error: updateError } = await supabase
-          .from('user_profiles')
+          .from('profiles')
           .update({ role: 'admin' })
           .eq('id', data.user.id);
         
