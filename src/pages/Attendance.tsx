@@ -34,6 +34,19 @@ import { useAttendance } from '@/contexts/AttendanceContext';
 import { format } from "date-fns";
 import { Search, Calendar as CalendarIcon } from 'lucide-react';
 import { cn } from '@/lib/utils';
+import { AttendanceRecord } from '@/lib/types';
+
+// Create a new type that extends the AttendanceRecord for absent employees
+interface AbsentRecord {
+  id: string;
+  employeeId: string;
+  date: string;
+  status: 'absent';
+  note: string;
+}
+
+// Union type for all records we'll display
+type DisplayRecord = AttendanceRecord | AbsentRecord;
 
 const Attendance = () => {
   const { employees, attendanceRecords } = useAttendance();
@@ -101,7 +114,7 @@ const Attendance = () => {
   });
   
   // Create records for absent employees
-  const absentRecords = absentEmployees.map(employee => ({
+  const absentRecords: AbsentRecord[] = absentEmployees.map(employee => ({
     id: `absent_${employee.id}_${formattedDate}`,
     employeeId: employee.id,
     date: formattedDate,
@@ -110,7 +123,7 @@ const Attendance = () => {
   }));
   
   // Combine filtered records with absent records if we're showing all or specifically absent
-  const displayRecords = statusFilter === 'all' || statusFilter === 'absent'
+  const displayRecords: DisplayRecord[] = statusFilter === 'all' || statusFilter === 'absent'
     ? [...filteredRecords, ...absentRecords]
     : filteredRecords;
   
@@ -318,8 +331,8 @@ const Attendance = () => {
                           {record.status.charAt(0).toUpperCase() + record.status.slice(1)}
                         </span>
                       </TableCell>
-                      <TableCell>{record.timeIn || '—'}</TableCell>
-                      <TableCell>{record.timeOut || '—'}</TableCell>
+                      <TableCell>{'timeIn' in record ? record.timeIn || '—' : '—'}</TableCell>
+                      <TableCell>{'timeOut' in record ? record.timeOut || '—' : '—'}</TableCell>
                       <TableCell>{record.note || '—'}</TableCell>
                     </TableRow>
                   );
