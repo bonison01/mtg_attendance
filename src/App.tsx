@@ -18,6 +18,7 @@ import Reports from "./pages/Reports";
 import Settings from "./pages/Settings";
 import PasswordReset from "./pages/PasswordReset";
 import NotFound from "./pages/NotFound";
+import OpenClockInDashboard from "./pages/OpenClockInDashboard";
 
 const queryClient = new QueryClient();
 
@@ -33,6 +34,7 @@ const App = () => (
               <Route path="/auth" element={<Auth />} />
               <Route path="/login" element={<Auth />} />
               <Route path="/reset-password" element={<PasswordReset />} />
+              <Route path="/open-clock" element={<OpenClockInDashboard />} />
               
               <Route path="/" element={
                 <MainLayout>
