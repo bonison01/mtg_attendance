@@ -303,6 +303,17 @@ const OpenClockInDashboard = () => {
     employee.department.toLowerCase().includes(searchTerm.toLowerCase())
   );
 
+  const getAttendanceBadgeColor = (status: string) => {
+    switch(status) {
+      case 'present': return 'bg-green-500';
+      case 'late': return 'bg-amber-500';
+      case 'absent': return 'bg-red-500';
+      case 'holiday': return 'bg-purple-500';
+      case 'leave': return 'bg-blue-500';
+      default: return 'bg-gray-500';
+    }
+  };
+
   if (loading) {
     return (
       <div className="flex items-center justify-center h-screen">
@@ -380,12 +391,7 @@ const OpenClockInDashboard = () => {
                         </p>
                       </div>
                       {attendanceRecord && (
-                        <Badge className={
-                          attendanceRecord.status === 'present' ? 'bg-green-500' : 
-                          attendanceRecord.status === 'late' ? 'bg-amber-500' : 
-                          attendanceRecord.status === 'absent' ? 'bg-red-500' :
-                          attendanceRecord.status === 'holiday' ? 'bg-purple-500' : 'bg-blue-500'
-                        }>
+                        <Badge className={getAttendanceBadgeColor(attendanceRecord.status)}>
                           {attendanceRecord.status.charAt(0).toUpperCase() + attendanceRecord.status.slice(1)}
                         </Badge>
                       )}

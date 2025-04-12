@@ -22,6 +22,7 @@ export const getVerificationRequirements = async (): Promise<{
   requireFingerprint: boolean;
 }> => {
   try {
+    // Use the newly created attendance_settings table
     const { data, error } = await supabase
       .from('attendance_settings')
       .select('require_code, require_selfie, require_fingerprint')
@@ -93,6 +94,7 @@ export const getEmployeeSchedule = async (employeeId: string): Promise<{
   holidays: string[]; // Array of dates in format YYYY-MM-DD
 }> => {
   try {
+    // Use the newly created employee_schedules table
     const { data, error } = await supabase
       .from('employee_schedules')
       .select('expected_clock_in, holidays')

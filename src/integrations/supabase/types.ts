@@ -50,6 +50,33 @@ export type Database = {
           },
         ]
       }
+      attendance_settings: {
+        Row: {
+          created_at: string
+          id: string
+          require_code: boolean
+          require_fingerprint: boolean
+          require_selfie: boolean
+          updated_at: string
+        }
+        Insert: {
+          created_at?: string
+          id?: string
+          require_code?: boolean
+          require_fingerprint?: boolean
+          require_selfie?: boolean
+          updated_at?: string
+        }
+        Update: {
+          created_at?: string
+          id?: string
+          require_code?: boolean
+          require_fingerprint?: boolean
+          require_selfie?: boolean
+          updated_at?: string
+        }
+        Relationships: []
+      }
       cash_transactions: {
         Row: {
           amount: number
@@ -162,6 +189,41 @@ export type Database = {
           user_id?: string | null
         }
         Relationships: []
+      }
+      employee_schedules: {
+        Row: {
+          created_at: string
+          employee_id: string
+          expected_clock_in: string
+          holidays: string[] | null
+          id: string
+          updated_at: string
+        }
+        Insert: {
+          created_at?: string
+          employee_id: string
+          expected_clock_in?: string
+          holidays?: string[] | null
+          id?: string
+          updated_at?: string
+        }
+        Update: {
+          created_at?: string
+          employee_id?: string
+          expected_clock_in?: string
+          holidays?: string[] | null
+          id?: string
+          updated_at?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "employee_schedules_employee_id_fkey"
+            columns: ["employee_id"]
+            isOneToOne: false
+            referencedRelation: "employees"
+            referencedColumns: ["id"]
+          },
+        ]
       }
       employees: {
         Row: {

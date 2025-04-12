@@ -18,7 +18,7 @@ export interface AttendanceRecord {
   date: string;
   timeIn?: string;
   timeOut?: string;
-  status: 'present' | 'absent' | 'late' | 'leave';
+  status: 'present' | 'absent' | 'late' | 'leave' | 'holiday';
   note?: string;
 }
 

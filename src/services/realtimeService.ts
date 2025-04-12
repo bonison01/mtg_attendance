@@ -55,6 +55,23 @@ export const subscribeToSettingsChanges = (callback: RealtimeSubscriptionCallbac
   return channel;
 };
 
+export const subscribeToScheduleChanges = (callback: RealtimeSubscriptionCallback): RealtimeChannel => {
+  const channel = supabase
+    .channel('schedule-changes')
+    .on(
+      'postgres_changes',
+      {
+        event: '*',
+        schema: 'public',
+        table: 'employee_schedules'
+      },
+      (payload) => callback(payload)
+    )
+    .subscribe();
+
+  return channel;
+};
+
 export const unsubscribeFromChannel = (channel: RealtimeChannel): void => {
   supabase.removeChannel(channel);
 };
