@@ -1,4 +1,3 @@
-
 import React, { useState, useEffect } from 'react';
 import {
   Card,
@@ -16,6 +15,7 @@ import { useToast } from "@/components/ui/use-toast";
 import { Copy, RefreshCcw } from "lucide-react";
 import { getDailyCode } from '@/utils/codeGenerator';
 import { subscribeToAttendanceChanges } from '@/services/realtimeService';
+import { supabase } from '@/integrations/supabase/client';
 
 const Settings = () => {
   const { toast } = useToast();
@@ -33,6 +33,9 @@ const Settings = () => {
   const [workStartTime, setWorkStartTime] = useState('09:00');
   const [workEndTime, setWorkEndTime] = useState('17:00');
   const [lateThreshold, setLateThreshold] = useState('15');
+  
+  // Company settings persistence
+  const [isSavingCompany, setIsSavingCompany] = useState(false);
 
   // Initialize verification code on component mount
   useEffect(() => {
@@ -54,9 +57,30 @@ const Settings = () => {
       }
     });
     
+    // Load company settings from local storage
+    const savedCompanyName = localStorage.getItem('companyName');
+    if (savedCompanyName) {
+      setCompanyName(savedCompanyName);
+    }
+    
+    // Count today's attendance records
+    const fetchTodayAttendance = async () => {
+      const today = new Date().toISOString().split('T')[0];
+      const { count, error } = await supabase
+        .from('attendance_records')
+        .select('*', { count: 'exact', head: true })
+        .eq('date', today);
+        
+      if (!error && count !== null) {
+        setRealtimeAttendance(count);
+      }
+    };
+    
+    fetchTodayAttendance();
+    
     return () => {
       if (channel) {
-        channel.unsubscribe();
+        supabase.removeChannel(channel);
       }
     };
   }, []);
@@ -79,10 +103,19 @@ const Settings = () => {
   };
   
   const handleSaveGeneral = () => {
-    toast({
-      title: "Settings Saved",
-      description: "Your general settings have been updated.",
-    });
+    // Save company name to local storage for persistence
+    localStorage.setItem('companyName', companyName);
+    
+    setIsSavingCompany(true);
+    
+    // Simulate saving to database
+    setTimeout(() => {
+      setIsSavingCompany(false);
+      toast({
+        title: "Settings Saved",
+        description: "Your general settings have been updated.",
+      });
+    }, 600);
   };
   
   const handleSaveNotifications = () => {
@@ -147,7 +180,12 @@ const Settings = () => {
               </div>
               
               <div className="flex justify-end">
-                <Button onClick={handleSaveGeneral}>Save Changes</Button>
+                <Button 
+                  onClick={handleSaveGeneral} 
+                  disabled={isSavingCompany}
+                >
+                  {isSavingCompany ? 'Saving...' : 'Save Changes'}
+                </Button>
               </div>
             </CardContent>
           </Card>

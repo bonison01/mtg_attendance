@@ -19,7 +19,7 @@ import {
   Calendar, Clock, AlertCircle
 } from 'lucide-react';
 import { supabase } from '@/integrations/supabase/client';
-import { subscribeToAttendanceChanges } from '@/services/realtimeService';
+import { subscribeToAttendanceChanges, getCurrentDayAttendanceStats } from '@/services/realtimeService';
 import { useToast } from "@/components/ui/use-toast";
 import { 
   Select, 
@@ -29,29 +29,24 @@ import {
   SelectValue 
 } from "@/components/ui/select";
 import { calculateSalaryDeduction, getEmployeeSchedule } from '@/services/codeService';
+import { AttendanceRecord } from '@/lib/types';
 
 const Reports = () => {
   const [weeklyData, setWeeklyData] = useState([
-    { day: 'Monday', present: 42, late: 5, absent: 3, leave: 2 },
-    { day: 'Tuesday', present: 45, late: 3, absent: 2, leave: 2 },
-    { day: 'Wednesday', present: 40, late: 7, absent: 4, leave: 1 },
-    { day: 'Thursday', present: 44, late: 4, absent: 2, leave: 2 },
-    { day: 'Friday', present: 38, late: 6, absent: 5, leave: 3 },
+    { day: 'Monday', present: 0, late: 0, absent: 0, leave: 0, holiday: 0 },
+    { day: 'Tuesday', present: 0, late: 0, absent: 0, leave: 0, holiday: 0 },
+    { day: 'Wednesday', present: 0, late: 0, absent: 0, leave: 0, holiday: 0 },
+    { day: 'Thursday', present: 0, late: 0, absent: 0, leave: 0, holiday: 0 },
+    { day: 'Friday', present: 0, late: 0, absent: 0, leave: 0, holiday: 0 },
   ]);
   
-  const [departmentData, setDepartmentData] = useState([
-    { department: 'Engineering', attendance: 96 },
-    { department: 'Product', attendance: 94 },
-    { department: 'Design', attendance: 98 },
-    { department: 'Marketing', attendance: 92 },
-    { department: 'HR', attendance: 97 },
-  ]);
-
+  const [departmentData, setDepartmentData] = useState([]);
   const [realtimeStats, setRealtimeStats] = useState({
     present: 0,
     late: 0,
     absent: 0,
-    leave: 0
+    leave: 0,
+    holiday: 0
   });
 
   const [lastRefreshed, setLastRefreshed] = useState(new Date());
@@ -93,23 +88,17 @@ const Reports = () => {
     fetchDepartmentData();
     fetchMonthlyReportData(selectedMonth);
 
+    // Get real-time stats for today initially
+    getCurrentDayAttendanceStats().then(stats => {
+      setRealtimeStats(stats);
+    });
+
     // Set up real-time attendance updates
     const channel = subscribeToAttendanceChanges((payload) => {
       if (payload.new) {
-        // Update attendance stats in real-time
-        setRealtimeStats(prev => {
-          const newStats = { ...prev };
-          
-          if (payload.eventType === 'INSERT') {
-            // Increment the appropriate stat counter
-            newStats[payload.new.status] = (newStats[payload.new.status] || 0) + 1;
-          } else if (payload.eventType === 'UPDATE' && payload.old.status !== payload.new.status) {
-            // Decrement old status and increment new status
-            newStats[payload.old.status] = Math.max(0, (newStats[payload.old.status] || 0) - 1);
-            newStats[payload.new.status] = (newStats[payload.new.status] || 0) + 1;
-          }
-          
-          return newStats;
+        // Update the stats/data when attendance changes
+        getCurrentDayAttendanceStats().then(stats => {
+          setRealtimeStats(stats);
         });
         
         // Update the last refreshed timestamp
@@ -117,15 +106,16 @@ const Reports = () => {
         
         // Refresh appropriate data based on what changed
         fetchAttendanceData();
-        fetchDepartmentData();
-        fetchMonthlyReportData(selectedMonth);
+        if (payload.new.date && payload.new.date.startsWith(selectedMonth)) {
+          fetchMonthlyReportData(selectedMonth);
+        }
       }
     });
     
     // Clean up the subscription when component unmounts
     return () => {
       if (channel) {
-        channel.unsubscribe();
+        supabase.removeChannel(channel);
       }
     };
   }, []);
@@ -139,31 +129,73 @@ const Reports = () => {
   const fetchAttendanceData = async () => {
     setLoading(true);
     try {
-      // In a real implementation, this would fetch data from Supabase
-      // For now, we'll simulate an API delay
-      setTimeout(() => {
-        // Update with some simulated real data
-        const today = new Date();
-        const dayOfWeek = today.getDay();
+      // Get start and end dates for the current week
+      const now = new Date();
+      const day = now.getDay(); // 0 is Sunday, 1 is Monday, etc.
+      const diff = now.getDate() - day + (day === 0 ? -6 : 1); // Adjust when day is Sunday
+      const monday = new Date(now.setDate(diff));
+      const weekStart = monday.toISOString().split('T')[0];
+      
+      const weekEnd = new Date(monday);
+      weekEnd.setDate(monday.getDate() + 4); // Friday
+      const weekEndStr = weekEnd.toISOString().split('T')[0];
+      
+      // Get attendance records for the current week
+      const { data: records, error } = await supabase
+        .from('attendance_records')
+        .select('*')
+        .gte('date', weekStart)
+        .lte('date', weekEndStr);
         
-        // Update today's data with the real-time stats
-        const updatedWeeklyData = [...weeklyData];
-        if (dayOfWeek >= 1 && dayOfWeek <= 5) {
-          updatedWeeklyData[dayOfWeek - 1] = {
-            day: ['Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday'][dayOfWeek - 1],
-            present: realtimeStats.present || updatedWeeklyData[dayOfWeek - 1].present,
-            late: realtimeStats.late || updatedWeeklyData[dayOfWeek - 1].late,
-            absent: realtimeStats.absent || updatedWeeklyData[dayOfWeek - 1].absent,
-            leave: realtimeStats.leave || updatedWeeklyData[dayOfWeek - 1].leave
-          };
-        }
-        
-        setWeeklyData(updatedWeeklyData);
+      if (error) {
+        console.error("Error fetching weekly attendance data:", error);
         setLoading(false);
-        setLastRefreshed(new Date());
-      }, 1000);
+        return;
+      }
+      
+      // Get total employee count
+      const { count: totalEmployees, error: countError } = await supabase
+        .from('employees')
+        .select('*', { count: 'exact', head: true });
+        
+      if (countError) {
+        console.error("Error fetching employee count:", countError);
+      }
+      
+      // Process records by day of week
+      const daysOfWeek = ['Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday'];
+      const weeklyStats = daysOfWeek.map((day, index) => {
+        const date = new Date(monday);
+        date.setDate(monday.getDate() + index);
+        const dateStr = date.toISOString().split('T')[0];
+        
+        // Filter records for this day
+        const dayRecords = records?.filter(record => record.date === dateStr) || [];
+        
+        // Count by status
+        const present = dayRecords.filter(record => record.status === 'present').length;
+        const late = dayRecords.filter(record => record.status === 'late').length;
+        const leave = dayRecords.filter(record => record.status === 'leave').length;
+        const holiday = dayRecords.filter(record => record.status === 'holiday').length;
+        
+        // Calculate absent (total employees minus those accounted for)
+        const absent = totalEmployees ? totalEmployees - (present + late + leave + holiday) : 0;
+        
+        return {
+          day,
+          present,
+          late,
+          absent: absent > 0 ? absent : 0,
+          leave,
+          holiday
+        };
+      });
+      
+      setWeeklyData(weeklyStats);
+      setLoading(false);
+      setLastRefreshed(new Date());
     } catch (error) {
-      console.error('Error fetching attendance data:', error);
+      console.error('Error in fetchAttendanceData:', error);
       setLoading(false);
     }
   };
@@ -171,16 +203,70 @@ const Reports = () => {
   // Fetch department data from Supabase
   const fetchDepartmentData = async () => {
     try {
-      // In a real implementation, this would fetch from Supabase
-      // For now, we'll use our mock data with some random variation
-      const updatedData = departmentData.map(dept => ({
-        ...dept,
-        attendance: Math.min(100, Math.max(85, dept.attendance + (Math.random() * 6 - 3)))
-      }));
+      // Get all unique departments
+      const { data: employeesData, error: deptError } = await supabase
+        .from('employees')
+        .select('department');
+        
+      if (deptError) {
+        console.error("Error fetching departments:", deptError);
+        return;
+      }
       
-      setDepartmentData(updatedData);
+      // Get unique departments
+      const departments = [...new Set(employeesData.map(emp => emp.department))];
+      
+      // For each department, calculate attendance rate
+      const departmentStats = [];
+      for (const dept of departments) {
+        // Get employees in this department
+        const { data: deptEmployees, error: empError } = await supabase
+          .from('employees')
+          .select('id')
+          .eq('department', dept);
+          
+        if (empError) {
+          console.error(`Error fetching employees for ${dept}:`, empError);
+          continue;
+        }
+        
+        const employeeIds = deptEmployees.map(emp => emp.id);
+        const totalInDept = employeeIds.length;
+        
+        if (totalInDept === 0) continue;
+        
+        // Get today's date
+        const today = new Date().toISOString().split('T')[0];
+        
+        // Get attendance for today for this department
+        const { data: attendance, error: attError } = await supabase
+          .from('attendance_records')
+          .select('*')
+          .eq('date', today)
+          .in('employee_id', employeeIds);
+          
+        if (attError) {
+          console.error(`Error fetching attendance for ${dept}:`, attError);
+          continue;
+        }
+        
+        // Count present and late (both considered "attended")
+        const attended = attendance?.filter(record => 
+          record.status === 'present' || record.status === 'late'
+        ).length || 0;
+        
+        // Calculate attendance rate
+        const attendanceRate = totalInDept > 0 ? (attended / totalInDept) * 100 : 0;
+        
+        departmentStats.push({
+          department: dept,
+          attendance: Math.round(attendanceRate)
+        });
+      }
+      
+      setDepartmentData(departmentStats);
     } catch (error) {
-      console.error('Error fetching department data:', error);
+      console.error('Error in fetchDepartmentData:', error);
     }
   };
   
@@ -189,39 +275,74 @@ const Reports = () => {
     try {
       setLoading(true);
       
-      // In a real implementation, we would fetch from Supabase
-      // For demonstration, we'll generate mock data
       const [year, monthNum] = month.split('-').map(Number);
       const daysInMonth = new Date(year, monthNum, 0).getDate();
       
-      // Generate attendance data for each day of the month
-      const mockData = [];
+      // Get total number of employees
+      const { count: totalEmployees, error: countError } = await supabase
+        .from('employees')
+        .select('*', { count: 'exact', head: true });
+        
+      if (countError) {
+        console.error("Error fetching employee count:", countError);
+        setLoading(false);
+        return;
+      }
+      
+      // Fetch attendance records for the entire month
+      const monthStart = `${year}-${String(monthNum).padStart(2, '0')}-01`;
+      const monthEnd = `${year}-${String(monthNum).padStart(2, '0')}-${String(daysInMonth).padStart(2, '0')}`;
+      
+      const { data: records, error: recError } = await supabase
+        .from('attendance_records')
+        .select('*')
+        .gte('date', monthStart)
+        .lte('date', monthEnd);
+        
+      if (recError) {
+        console.error("Error fetching monthly attendance records:", recError);
+        setLoading(false);
+        return;
+      }
+      
+      // Process records by day
+      const monthlyData = [];
       for (let day = 1; day <= daysInMonth; day++) {
         const date = `${year}-${String(monthNum).padStart(2, '0')}-${String(day).padStart(2, '0')}`;
-        const isWeekend = new Date(date).getDay() === 0 || new Date(date).getDay() === 6;
         
-        // Add some variation for demonstration
-        const presentCount = isWeekend ? Math.floor(Math.random() * 10) : 35 + Math.floor(Math.random() * 15);
-        const lateCount = isWeekend ? Math.floor(Math.random() * 3) : 2 + Math.floor(Math.random() * 8);
-        const absentCount = isWeekend ? 50 - presentCount - lateCount : 5 + Math.floor(Math.random() * 5);
-        const leaveCount = Math.floor(Math.random() * 3);
+        // Filter records for this day
+        const dayRecords = records?.filter(record => record.date === date) || [];
         
-        mockData.push({
+        // Count by status
+        const present = dayRecords.filter(record => record.status === 'present').length;
+        const late = dayRecords.filter(record => record.status === 'late').length;
+        const leave = dayRecords.filter(record => record.status === 'leave').length;
+        const holiday = dayRecords.filter(record => record.status === 'holiday').length;
+        
+        // Calculate absent (total employees minus those accounted for)
+        const absent = totalEmployees ? totalEmployees - (present + late + leave + holiday) : 0;
+        
+        // Calculate estimated deductions
+        // Assuming Rs 250 for late and Rs 500 for absent
+        const deductions = (late * 250) + (absent * 500);
+        
+        monthlyData.push({
           date,
           day: String(day).padStart(2, '0'),
-          present: presentCount,
-          late: lateCount,
-          absent: absentCount,
-          leave: leaveCount,
-          total: presentCount + lateCount + absentCount + leaveCount,
-          deductions: (lateCount * 250) + (absentCount * 500)
+          present,
+          late,
+          absent: absent > 0 ? absent : 0,
+          leave,
+          holiday,
+          total: totalEmployees || 0,
+          deductions
         });
       }
       
-      setMonthlyReportData(mockData);
+      setMonthlyReportData(monthlyData);
       setLoading(false);
     } catch (error) {
-      console.error('Error fetching monthly report data:', error);
+      console.error('Error in fetchMonthlyReportData:', error);
       setLoading(false);
     }
   };
@@ -230,6 +351,9 @@ const Reports = () => {
     fetchAttendanceData();
     fetchDepartmentData();
     fetchMonthlyReportData(selectedMonth);
+    getCurrentDayAttendanceStats().then(stats => {
+      setRealtimeStats(stats);
+    });
     toast({
       title: "Data Refreshed",
       description: "Report data has been updated with the latest information."
@@ -245,9 +369,6 @@ const Reports = () => {
         description: "Please wait while we generate your report..."
       });
       
-      // Simulate report generation delay
-      await new Promise(resolve => setTimeout(resolve, 1500));
-      
       let filename = '';
       let csvContent = '';
       
@@ -256,11 +377,11 @@ const Reports = () => {
         filename = `monthly_attendance_report_${selectedMonth}.csv`;
         
         // Create CSV header
-        csvContent = 'Date,Present,Late,Absent,Leave,Total,Deductions (Rs)\n';
+        csvContent = 'Date,Present,Late,Absent,Leave,Holiday,Total,Deductions (Rs)\n';
         
         // Add data rows
         monthlyReportData.forEach(day => {
-          csvContent += `${day.date},${day.present},${day.late},${day.absent},${day.leave},${day.total},${day.deductions}\n`;
+          csvContent += `${day.date},${day.present},${day.late},${day.absent},${day.leave},${day.holiday || 0},${day.total},${day.deductions}\n`;
         });
       } else if (reportType === 'salary') {
         // Format filename with the selected month
@@ -269,52 +390,85 @@ const Reports = () => {
         // Create CSV header
         csvContent = 'Employee ID,Employee Name,Department,Total Days Late,Total Days Absent,Late Deductions (Rs),Absence Deductions (Rs),Total Deductions (Rs)\n';
         
-        // Generate mock employee salary deductions
-        const employees = [
-          { id: '001', name: 'John Smith', department: 'Engineering' },
-          { id: '002', name: 'Emma Johnson', department: 'Design' },
-          { id: '003', name: 'Michael Brown', department: 'Marketing' },
-          { id: '004', name: 'Sophia Wilson', department: 'HR' },
-          { id: '005', name: 'James Davis', department: 'Product' }
-        ];
+        // Get all employees
+        const { data: employees, error: empError } = await supabase
+          .from('employees')
+          .select('*');
+          
+        if (empError) {
+          console.error("Error fetching employees:", empError);
+          throw new Error("Failed to fetch employee data");
+        }
         
-        employees.forEach(emp => {
-          const daysLate = Math.floor(Math.random() * 6); // 0-5 days late
-          const daysAbsent = Math.floor(Math.random() * 3); // 0-2 days absent
+        // Get attendance records for the month
+        const [year, monthNum] = selectedMonth.split('-').map(Number);
+        const monthStart = `${year}-${String(monthNum).padStart(2, '0')}-01`;
+        const daysInMonth = new Date(year, monthNum, 0).getDate();
+        const monthEnd = `${year}-${String(monthNum).padStart(2, '0')}-${String(daysInMonth).padStart(2, '0')}`;
+        
+        for (const emp of employees) {
+          // Get attendance records for this employee for the month
+          const { data: records, error } = await supabase
+            .from('attendance_records')
+            .select('*')
+            .eq('employee_id', emp.id)
+            .gte('date', monthStart)
+            .lte('date', monthEnd);
+            
+          if (error) {
+            console.error(`Error fetching records for employee ${emp.id}:`, error);
+            continue;
+          }
+          
+          // Count days late and absent
+          const daysLate = records?.filter(record => record.status === 'late').length || 0;
+          const daysAbsent = records?.filter(record => record.status === 'absent').length || 0;
+          
+          // Calculate deductions
           const lateDeductions = daysLate * 250;
           const absenceDeductions = daysAbsent * 500;
           const totalDeductions = lateDeductions + absenceDeductions;
           
           csvContent += `${emp.id},${emp.name},${emp.department},${daysLate},${daysAbsent},${lateDeductions},${absenceDeductions},${totalDeductions}\n`;
-        });
+        }
       } else {
         // Format filename with current date for daily or weekly reports
-        const today = new Date();
-        const dateStr = today.toISOString().split('T')[0];
-        filename = `${reportType}_attendance_report_${dateStr}.csv`;
+        const today = new Date().toISOString().split('T')[0];
+        filename = `${reportType}_attendance_report_${today}.csv`;
         
         // Create CSV header and data based on report type
         if (reportType === 'daily') {
           csvContent = 'Employee ID,Employee Name,Department,Clock In,Clock Out,Status,Late Deduction (Rs)\n';
           
-          // Mock data
-          const mockEmployees = [
-            { id: '001', name: 'John Smith', dept: 'Engineering', clockIn: '09:15', clockOut: '18:05', status: 'present', deduction: 0 },
-            { id: '002', name: 'Emma Johnson', dept: 'Design', clockIn: '09:30', clockOut: '18:00', status: 'late', deduction: 250 },
-            { id: '003', name: 'Michael Brown', dept: 'Marketing', clockIn: '08:55', clockOut: '17:45', status: 'present', deduction: 0 },
-            { id: '004', name: 'Sophia Wilson', dept: 'HR', clockIn: '', clockOut: '', status: 'absent', deduction: 500 },
-            { id: '005', name: 'James Davis', dept: 'Product', clockIn: '09:05', clockOut: '18:10', status: 'present', deduction: 0 }
-          ];
+          // Get today's attendance records with employee details
+          const { data: records, error } = await supabase
+            .from('attendance_records')
+            .select(`
+              id,
+              employee_id,
+              date,
+              time_in,
+              time_out,
+              status,
+              employees (name, department)
+            `)
+            .eq('date', today);
+            
+          if (error) {
+            console.error("Error fetching daily records:", error);
+            throw new Error("Failed to fetch attendance data");
+          }
           
-          mockEmployees.forEach(emp => {
-            csvContent += `${emp.id},${emp.name},${emp.dept},${emp.clockIn},${emp.clockOut},${emp.status},${emp.deduction}\n`;
+          records?.forEach(record => {
+            const deduction = record.status === 'late' ? 250 : record.status === 'absent' ? 500 : 0;
+            csvContent += `${record.employee_id},${record.employees?.name || 'Unknown'},${record.employees?.department || 'Unknown'},${record.time_in || ''},${record.time_out || ''},${record.status},${deduction}\n`;
           });
         } else if (reportType === 'weekly') {
-          csvContent = 'Day,Present,Late,Absent,Leave,Total\n';
+          csvContent = 'Day,Present,Late,Absent,Leave,Holiday,Total\n';
           
           weeklyData.forEach(day => {
-            const total = day.present + day.late + day.absent + day.leave;
-            csvContent += `${day.day},${day.present},${day.late},${day.absent},${day.leave},${total}\n`;
+            const total = day.present + day.late + day.absent + day.leave + day.holiday;
+            csvContent += `${day.day},${day.present},${day.late},${day.absent},${day.leave},${day.holiday || 0},${total}\n`;
           });
         }
       }
