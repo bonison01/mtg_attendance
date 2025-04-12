@@ -6,7 +6,6 @@ export interface Employee {
   department: string;
   imageUrl?: string;
   fingerprint?: string; // Stored fingerprint data/hash
-  last_selfie_url?: string; // URL to the last stored selfie image
   email: string;
   phoneNumber: string;
   joinDate: string;

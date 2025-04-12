@@ -1,3 +1,4 @@
+
 /**
  * Service for managing verification code validation and attendance rules
  */
@@ -60,10 +61,11 @@ export const validateSelfie = async (employeeId: string, selfieImage: string): P
           
         if (!uploadError) {
           // On successful upload, update employee with reference to the selfie
+          // Using image_url instead of last_selfie_url as that's what exists in the database
           await supabase
             .from('employees')
             .update({ 
-              last_selfie_url: filePath 
+              image_url: filePath 
             })
             .eq('id', employeeId);
         }
