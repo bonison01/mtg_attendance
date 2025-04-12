@@ -8,7 +8,7 @@ import { AttendanceProvider } from "./contexts/AttendanceContext";
 import { AuthProvider } from "./contexts/AuthContext";
 import AuthGuard from "./components/auth/AuthGuard";
 import MainLayout from "./components/layout/MainLayout";
-import Auth from "./pages/Auth";
+import Login from "./pages/Login";
 import Dashboard from "./pages/Dashboard";
 import Employees from "./pages/Employees";
 import EmployeeRegistration from "./pages/EmployeeRegistration";
@@ -31,8 +31,8 @@ const App = () => (
           <Sonner />
           <BrowserRouter>
             <Routes>
-              <Route path="/auth" element={<Auth />} />
-              <Route path="/login" element={<Auth />} />
+              <Route path="/login" element={<Login />} />
+              <Route path="/auth" element={<Navigate replace to="/login" />} />
               <Route path="/reset-password" element={<PasswordReset />} />
               <Route path="/open-clock" element={<OpenClockInDashboard />} />
               

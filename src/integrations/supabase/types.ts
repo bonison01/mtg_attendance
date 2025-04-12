@@ -9,7 +9,193 @@ export type Json =
 export type Database = {
   public: {
     Tables: {
-      [_ in never]: never
+      attendance_records: {
+        Row: {
+          created_at: string | null
+          date: string
+          employee_id: string
+          id: string
+          note: string | null
+          status: string | null
+          time_in: string | null
+          time_out: string | null
+        }
+        Insert: {
+          created_at?: string | null
+          date: string
+          employee_id: string
+          id?: string
+          note?: string | null
+          status?: string | null
+          time_in?: string | null
+          time_out?: string | null
+        }
+        Update: {
+          created_at?: string | null
+          date?: string
+          employee_id?: string
+          id?: string
+          note?: string | null
+          status?: string | null
+          time_in?: string | null
+          time_out?: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "attendance_records_employee_id_fkey"
+            columns: ["employee_id"]
+            isOneToOne: false
+            referencedRelation: "employees"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      attendance_settings: {
+        Row: {
+          created_at: string | null
+          default_clock_in_time: string | null
+          id: string
+          require_code: boolean | null
+          require_fingerprint: boolean | null
+          require_selfie: boolean | null
+          updated_at: string | null
+        }
+        Insert: {
+          created_at?: string | null
+          default_clock_in_time?: string | null
+          id?: string
+          require_code?: boolean | null
+          require_fingerprint?: boolean | null
+          require_selfie?: boolean | null
+          updated_at?: string | null
+        }
+        Update: {
+          created_at?: string | null
+          default_clock_in_time?: string | null
+          id?: string
+          require_code?: boolean | null
+          require_fingerprint?: boolean | null
+          require_selfie?: boolean | null
+          updated_at?: string | null
+        }
+        Relationships: []
+      }
+      company_settings: {
+        Row: {
+          brand_color: string | null
+          company_name: string
+          created_at: string | null
+          id: string
+          updated_at: string | null
+        }
+        Insert: {
+          brand_color?: string | null
+          company_name?: string
+          created_at?: string | null
+          id?: string
+          updated_at?: string | null
+        }
+        Update: {
+          brand_color?: string | null
+          company_name?: string
+          created_at?: string | null
+          id?: string
+          updated_at?: string | null
+        }
+        Relationships: []
+      }
+      employee_schedules: {
+        Row: {
+          created_at: string | null
+          employee_id: string
+          expected_clock_in: string | null
+          holidays: Json | null
+          id: string
+        }
+        Insert: {
+          created_at?: string | null
+          employee_id: string
+          expected_clock_in?: string | null
+          holidays?: Json | null
+          id?: string
+        }
+        Update: {
+          created_at?: string | null
+          employee_id?: string
+          expected_clock_in?: string | null
+          holidays?: Json | null
+          id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "employee_schedules_employee_id_fkey"
+            columns: ["employee_id"]
+            isOneToOne: false
+            referencedRelation: "employees"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      employees: {
+        Row: {
+          created_at: string | null
+          date_of_birth: string | null
+          department: string | null
+          email: string
+          fingerprint: string | null
+          id: string
+          image_url: string | null
+          join_date: string
+          name: string
+          phone_number: string | null
+          position: string
+        }
+        Insert: {
+          created_at?: string | null
+          date_of_birth?: string | null
+          department?: string | null
+          email: string
+          fingerprint?: string | null
+          id?: string
+          image_url?: string | null
+          join_date: string
+          name: string
+          phone_number?: string | null
+          position: string
+        }
+        Update: {
+          created_at?: string | null
+          date_of_birth?: string | null
+          department?: string | null
+          email?: string
+          fingerprint?: string | null
+          id?: string
+          image_url?: string | null
+          join_date?: string
+          name?: string
+          phone_number?: string | null
+          position?: string
+        }
+        Relationships: []
+      }
+      profiles: {
+        Row: {
+          created_at: string | null
+          id: string
+          role: string | null
+        }
+        Insert: {
+          created_at?: string | null
+          id: string
+          role?: string | null
+        }
+        Update: {
+          created_at?: string | null
+          id?: string
+          role?: string | null
+        }
+        Relationships: []
+      }
     }
     Views: {
       [_ in never]: never
