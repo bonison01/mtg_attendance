@@ -1,4 +1,3 @@
-
 import React, { useState, useEffect, useRef } from 'react';
 import { supabase } from '@/integrations/supabase/client';
 import { Employee, AttendanceRecord } from '@/lib/types';
@@ -29,6 +28,8 @@ import {
   DialogFooter,
 } from '@/components/ui/dialog';
 import { Tabs, TabsList, TabsTrigger, TabsContent } from '@/components/ui/tabs';
+import { validateCode, recordAttendance, getVerificationRequirements } from '@/services/codeService';
+import { getDailyCode } from '@/utils/codeGenerator';
 
 const OpenClockInDashboard = () => {
   const [employees, setEmployees] = useState<Employee[]>([]);
@@ -46,6 +47,11 @@ const OpenClockInDashboard = () => {
   const [fingerprintScanning, setFingerprintScanning] = useState<boolean>(false);
   const [verificationSuccess, setVerificationSuccess] = useState<boolean | null>(null);
   const [verifyingInput, setVerifyingInput] = useState<boolean>(false);
+  const [verificationRequirements, setVerificationRequirements] = useState({
+    requireCode: true,
+    requireSelfie: false,
+    requireFingerprint: false
+  });
   
   const videoRef = useRef<HTMLVideoElement>(null);
   const canvasRef = useRef<HTMLCanvasElement>(null);
@@ -53,7 +59,17 @@ const OpenClockInDashboard = () => {
   useEffect(() => {
     const fetchData = async () => {
       try {
-        // Fetch employees
+        const requirements = await getVerificationRequirements();
+        setVerificationRequirements(requirements);
+        
+        if (requirements.requireSelfie) {
+          setVerificationTab('selfie');
+        } else if (requirements.requireFingerprint) {
+          setVerificationTab('fingerprint');
+        } else if (requirements.requireCode) {
+          setVerificationTab('code');
+        }
+        
         const { data: employeeData, error: employeeError } = await supabase
           .from('employees')
           .select('*');
@@ -75,7 +91,6 @@ const OpenClockInDashboard = () => {
         
         setEmployees(mappedEmployees);
         
-        // Fetch today's attendance records
         const today = new Date().toISOString().split('T')[0];
         const { data: attendanceData, error: attendanceError } = await supabase
           .from('attendance_records')
@@ -96,9 +111,7 @@ const OpenClockInDashboard = () => {
         
         setAttendanceRecords(mappedAttendance);
 
-        // Generate a daily random code - normally this would be stored server-side
-        const randomCode = Math.floor(1000 + Math.random() * 9000).toString();
-        setDailyCode(randomCode);
+        setDailyCode(getDailyCode());
         
       } catch (error: any) {
         toast.error("Error loading data", {
@@ -111,7 +124,6 @@ const OpenClockInDashboard = () => {
     
     fetchData();
 
-    // Set up realtime subscriptions for attendance records
     const channel = supabase
       .channel('public:attendance_records')
       .on('postgres_changes', { 
@@ -119,7 +131,6 @@ const OpenClockInDashboard = () => {
         schema: 'public', 
         table: 'attendance_records' 
       }, (payload) => {
-        // Handle real-time updates to attendance records
         if (payload.eventType === 'INSERT') {
           const newRecord = payload.new;
           const mappedRecord: AttendanceRecord = {
@@ -164,87 +175,13 @@ const OpenClockInDashboard = () => {
     setVerificationSuccess(null);
     setVerificationCode('');
     setCapturedImage(null);
-    setVerificationTab('selfie');
-  };
-
-  const clockIn = async () => {
-    if (!currentEmployeeId) return;
     
-    try {
-      const today = new Date().toISOString().split('T')[0];
-      const now = new Date().toLocaleTimeString();
-      
-      const attendanceData = {
-        employee_id: currentEmployeeId,
-        date: today,
-        time_in: now,
-        status: new Date().getHours() >= 9 ? 'late' : 'present',
-        note: verificationTab === 'selfie' ? 'Verified with selfie' : 
-              verificationTab === 'fingerprint' ? 'Verified with fingerprint' : 
-              'Verified with code'
-      };
-      
-      const { data, error } = await supabase
-        .from('attendance_records')
-        .insert(attendanceData)
-        .select()
-        .single();
-      
-      if (error) throw error;
-      
-      toast.success("Clock In Successful", {
-        description: `Clocked in at ${now}`
-      });
-      
-      setVerificationDialogOpen(false);
-    } catch (error: any) {
-      toast.error("Clock In Failed", {
-        description: error.message
-      });
-    }
-  };
-
-  const clockOut = async () => {
-    if (!currentEmployeeId) return;
-    
-    try {
-      const today = new Date().toISOString().split('T')[0];
-      const now = new Date().toLocaleTimeString();
-      
-      const { data: record, error: findError } = await supabase
-        .from('attendance_records')
-        .select('*')
-        .eq('employee_id', currentEmployeeId)
-        .eq('date', today)
-        .is('time_out', null)
-        .single();
-      
-      if (findError) {
-        throw new Error('No clock-in record found for today');
-      }
-      
-      const { error: updateError } = await supabase
-        .from('attendance_records')
-        .update({ 
-          time_out: now,
-          note: record.note + ' | Clocked out with ' + 
-                (verificationTab === 'selfie' ? 'selfie' : 
-                verificationTab === 'fingerprint' ? 'fingerprint' : 
-                'code')
-        })
-        .eq('id', record.id);
-      
-      if (updateError) throw updateError;
-      
-      toast.success("Clock Out Successful", {
-        description: `Clocked out at ${now}`
-      });
-      
-      setVerificationDialogOpen(false);
-    } catch (error: any) {
-      toast.error("Clock Out Failed", {
-        description: error.message
-      });
+    if (verificationRequirements.requireSelfie) {
+      setVerificationTab('selfie');
+    } else if (verificationRequirements.requireFingerprint) {
+      setVerificationTab('fingerprint');
+    } else {
+      setVerificationTab('code');
     }
   };
 
@@ -285,19 +222,15 @@ const OpenClockInDashboard = () => {
     const context = canvasRef.current.getContext('2d');
     if (!context) return;
     
-    // Set canvas dimensions to match the video
     canvasRef.current.width = videoRef.current.videoWidth;
     canvasRef.current.height = videoRef.current.videoHeight;
     
-    // Draw the video frame to the canvas
     context.drawImage(videoRef.current, 0, 0, canvasRef.current.width, canvasRef.current.height);
     
-    // Convert the canvas to a data URL
     const dataUrl = canvasRef.current.toDataURL('image/jpeg');
     setCapturedImage(dataUrl);
     stopCamera();
     
-    // In a real app, here is where you would send the image to a server for processing
     simulateVerification();
   };
 
@@ -305,7 +238,6 @@ const OpenClockInDashboard = () => {
     setFingerprintScanning(true);
     setVerificationSuccess(null);
     
-    // Simulate fingerprint scanning
     setTimeout(() => {
       setFingerprintScanning(false);
       simulateVerification();
@@ -316,13 +248,12 @@ const OpenClockInDashboard = () => {
     setVerifyingInput(true);
     setVerificationSuccess(null);
     
-    // Check if entered code matches daily code
     setTimeout(() => {
       setVerifyingInput(false);
-      if (verificationCode === dailyCode) {
-        setVerificationSuccess(true);
-      } else {
-        setVerificationSuccess(false);
+      const isCodeValid = validateCode(verificationCode);
+      setVerificationSuccess(isCodeValid);
+      
+      if (!isCodeValid) {
         toast.error("Incorrect Code", {
           description: "The verification code entered is incorrect."
         });
@@ -333,20 +264,36 @@ const OpenClockInDashboard = () => {
   const simulateVerification = () => {
     setVerifyingInput(true);
     
-    // Simulate verification process (in real app, this would be an actual verification)
     setTimeout(() => {
       setVerifyingInput(false);
       setVerificationSuccess(true);
     }, 1500);
   };
 
-  const completeVerification = () => {
-    if (verificationSuccess) {
-      if (clockInMode) {
-        clockIn();
+  const completeVerification = async () => {
+    if (!verificationSuccess || !currentEmployeeId) return;
+    
+    try {
+      const verificationMethod = verificationTab as 'selfie' | 'fingerprint' | 'code';
+      const action = clockInMode ? 'in' : 'out';
+      
+      const result = await recordAttendance(currentEmployeeId, action, verificationMethod);
+      
+      if (result.success) {
+        toast.success(clockInMode ? "Clock In Successful" : "Clock Out Successful", {
+          description: result.message
+        });
+        setVerificationDialogOpen(false);
       } else {
-        clockOut();
+        toast.error(clockInMode ? "Clock In Failed" : "Clock Out Failed", {
+          description: result.message
+        });
       }
+    } catch (error: any) {
+      console.error("Error completing verification:", error);
+      toast.error("Verification Failed", {
+        description: error.message || "An unexpected error occurred"
+      });
     }
   };
 
@@ -436,7 +383,8 @@ const OpenClockInDashboard = () => {
                         <Badge className={
                           attendanceRecord.status === 'present' ? 'bg-green-500' : 
                           attendanceRecord.status === 'late' ? 'bg-amber-500' : 
-                          attendanceRecord.status === 'absent' ? 'bg-red-500' : 'bg-blue-500'
+                          attendanceRecord.status === 'absent' ? 'bg-red-500' :
+                          attendanceRecord.status === 'holiday' ? 'bg-purple-500' : 'bg-blue-500'
                         }>
                           {attendanceRecord.status.charAt(0).toUpperCase() + attendanceRecord.status.slice(1)}
                         </Badge>
@@ -503,7 +451,6 @@ const OpenClockInDashboard = () => {
         )}
       </div>
 
-      {/* Verification Dialog */}
       <Dialog open={verificationDialogOpen} onOpenChange={setVerificationDialogOpen}>
         <DialogContent className="sm:max-w-md">
           <DialogHeader>
@@ -516,15 +463,27 @@ const OpenClockInDashboard = () => {
           <div className="py-4">
             <Tabs value={verificationTab} onValueChange={setVerificationTab}>
               <TabsList className="grid grid-cols-3 w-full">
-                <TabsTrigger value="selfie" className="flex items-center gap-1">
+                <TabsTrigger 
+                  value="selfie" 
+                  className="flex items-center gap-1" 
+                  disabled={!verificationRequirements.requireSelfie && (verificationRequirements.requireCode || verificationRequirements.requireFingerprint)}
+                >
                   <Camera className="h-4 w-4" />
                   Selfie
                 </TabsTrigger>
-                <TabsTrigger value="fingerprint" className="flex items-center gap-1">
+                <TabsTrigger 
+                  value="fingerprint" 
+                  className="flex items-center gap-1"
+                  disabled={!verificationRequirements.requireFingerprint && (verificationRequirements.requireCode || verificationRequirements.requireSelfie)}
+                >
                   <Fingerprint className="h-4 w-4" />
                   Fingerprint
                 </TabsTrigger>
-                <TabsTrigger value="code" className="flex items-center gap-1">
+                <TabsTrigger 
+                  value="code" 
+                  className="flex items-center gap-1"
+                  disabled={!verificationRequirements.requireCode && (verificationRequirements.requireSelfie || verificationRequirements.requireFingerprint)}
+                >
                   <Hash className="h-4 w-4" />
                   Daily Code
                 </TabsTrigger>
@@ -642,14 +601,14 @@ const OpenClockInDashboard = () => {
                         placeholder="Enter 4-digit code"
                         value={verificationCode}
                         onChange={(e) => setVerificationCode(e.target.value)}
-                        maxLength={4}
+                        maxLength={6}
                         className="text-center text-lg"
                       />
                     </div>
                     <div className="relative">
                       <Button 
                         onClick={verifyCode} 
-                        disabled={verificationCode.length !== 4 || verifyingInput || verificationSuccess === true}
+                        disabled={verificationCode.length !== 6 || verifyingInput || verificationSuccess === true}
                       >
                         {verifyingInput ? 
                           <Loader2 className="h-4 w-4 mr-2 animate-spin" /> : 
@@ -688,6 +647,20 @@ const OpenClockInDashboard = () => {
           </DialogFooter>
         </DialogContent>
       </Dialog>
+
+      <div className="mt-16 border-t pt-6 text-center">
+        <div className="flex flex-col items-center justify-center space-y-2">
+          <p className="text-sm text-muted-foreground">
+            © {new Date().getFullYear()} Company Name. All rights reserved.
+          </p>
+          <a 
+            href="/login" 
+            className="text-xs text-primary hover:underline"
+          >
+            Admin Login
+          </a>
+        </div>
+      </div>
     </div>
   );
 };
