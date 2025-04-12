@@ -1,6 +1,6 @@
 
 import React, { useState } from "react";
-import { useNavigate, Link } from "react-router-dom";
+import { useNavigate } from "react-router-dom";
 import { Fingerprint } from 'lucide-react';
 import { Button } from "@/components/ui/button";
 import {
@@ -13,7 +13,6 @@ import {
 } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
-import { useAuth } from "@/contexts/AuthContext";
 import { useToast } from "@/components/ui/use-toast";
 
 const Login = () => {
@@ -22,21 +21,29 @@ const Login = () => {
   const [isLoading, setIsLoading] = useState(false);
   const navigate = useNavigate();
   const { toast } = useToast();
-  const { signIn } = useAuth();
 
-  const handleSubmit = async (e: React.FormEvent) => {
+  const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
     setIsLoading(true);
 
-    try {
-      await signIn(email, password);
-      navigate("/");
-    } catch (error: any) {
-      console.error("Login error:", error);
-      // The toast error is already handled in the AuthContext
-    } finally {
+    // Simulate authentication delay
+    setTimeout(() => {
+      // This is just for demo purposes - in a real app, you'd validate against a backend
+      if (email === "admin@company.com" && password === "password") {
+        toast({
+          title: "Login Successful",
+          description: "Welcome to BioPulse Attendance System",
+        });
+        navigate("/");
+      } else {
+        toast({
+          variant: "destructive",
+          title: "Login Failed",
+          description: "Invalid email or password. Please try again.",
+        });
+      }
       setIsLoading(false);
-    }
+    }, 1500);
   };
 
   return (
@@ -69,12 +76,12 @@ const Login = () => {
             <div className="space-y-2">
               <div className="flex items-center justify-between">
                 <Label htmlFor="password">Password</Label>
-                <Link
-                  to="/reset-password"
+                <a
+                  href="#"
                   className="text-sm text-blue-600 hover:text-blue-800"
                 >
                   Forgot password?
-                </Link>
+                </a>
               </div>
               <Input
                 id="password"
