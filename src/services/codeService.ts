@@ -103,7 +103,7 @@ export const validateFingerprint = async (employeeId: string): Promise<boolean> 
     const mockFingerprintHash = `fp_${Math.random().toString(36).substring(2, 15)}`;
     
     // Store the fingerprint for this employee if none exists
-    if (!employee.fingerprint) {
+    if (!employee?.fingerprint) {
       await supabase
         .from('employees')
         .update({ 
@@ -235,9 +235,29 @@ export const getEmployeeSchedule = async (employeeId: string): Promise<{
       }
     }
     
+    // Fix for the TypeScript error - Handle the holidays field correctly
+    // The holidays field is a JSONB array in PostgreSQL that needs to be parsed as string[]
+    let holidays: string[] = [];
+    if (data?.holidays) {
+      // Check if it's already an array
+      if (Array.isArray(data.holidays)) {
+        holidays = data.holidays as string[];
+      } else {
+        // Try to parse it if it's a JSON string
+        try {
+          const parsedHolidays = JSON.parse(typeof data.holidays === 'string' ? data.holidays : JSON.stringify(data.holidays));
+          if (Array.isArray(parsedHolidays)) {
+            holidays = parsedHolidays;
+          }
+        } catch (e) {
+          console.error("Error parsing holidays data:", e);
+        }
+      }
+    }
+    
     return {
       expectedClockInTime: data?.expected_clock_in || "09:00",
-      holidays: data?.holidays || []
+      holidays: holidays
     };
   } catch (error) {
     console.error("Error fetching employee schedule:", error);
