@@ -3,6 +3,7 @@ import { Employee, AttendanceRecord } from '@/lib/types';
 import { supabase } from '@/integrations/supabase/client';
 import { useToast } from '@/components/ui/use-toast';
 import { subscribeToAttendanceChanges, subscribeToEmployeeChanges, unsubscribeFromChannel } from '@/services/realtimeService';
+import { recordAttendance } from '@/services/codeService';
 
 type AttendanceContextType = {
   employees: Employee[];
@@ -10,8 +11,8 @@ type AttendanceContextType = {
   addEmployee: (employee: Omit<Employee, 'id'>) => Promise<string | undefined>;
   removeEmployee: (id: string) => Promise<void>;
   updateEmployee: (id: string, employee: Partial<Employee>) => Promise<void>;
-  clockIn: (employeeId: string) => Promise<void>;
-  clockOut: (employeeId: string) => Promise<void>;
+  clockIn: (employeeId: string, method?: 'selfie' | 'fingerprint' | 'code') => Promise<void>;
+  clockOut: (employeeId: string, method?: 'selfie' | 'fingerprint' | 'code') => Promise<void>;
   getTodayAttendance: (employeeId: string) => AttendanceRecord | null;
   resetPassword: (email: string, dateOfBirth: string) => Promise<boolean>;
   loading: boolean;
@@ -249,74 +250,57 @@ export const AttendanceProvider: React.FC<{ children: React.ReactNode }> = ({ ch
     }
   };
 
-  const clockIn = async (employeeId: string): Promise<void> => {
+  const clockIn = async (employeeId: string, method: 'selfie' | 'fingerprint' | 'code' = 'code'): Promise<void> => {
     try {
-      const today = new Date().toISOString().split('T')[0];
-      const now = new Date().toLocaleTimeString();
+      const result = await recordAttendance(employeeId, 'in', method);
       
-      const attendanceData = {
-        employee_id: employeeId,
-        date: today,
-        time_in: now,
-        status: new Date().getHours() >= 9 ? 'late' : 'present',
-        note: ''
-      };
-      
-      const { data, error } = await supabase
-        .from('attendance_records')
-        .insert(attendanceData)
-        .select()
-        .single();
-      
-      if (error) throw error;
-      
-      toast({
-        title: 'Clock In',
-        description: `Clocked in at ${now}`,
-      });
+      if (result.success) {
+        toast({
+          title: 'Clock In',
+          description: result.message,
+        });
+      } else {
+        toast({
+          variant: 'destructive',
+          title: 'Clock In Failed',
+          description: result.message,
+        });
+        throw new Error(result.message);
+      }
     } catch (error: any) {
       toast({
         variant: 'destructive',
         title: 'Clock In Failed',
         description: error.message,
       });
+      throw error;
     }
   };
 
-  const clockOut = async (employeeId: string): Promise<void> => {
+  const clockOut = async (employeeId: string, method: 'selfie' | 'fingerprint' | 'code' = 'code'): Promise<void> => {
     try {
-      const today = new Date().toISOString().split('T')[0];
-      const now = new Date().toLocaleTimeString();
+      const result = await recordAttendance(employeeId, 'out', method);
       
-      const { data, error: findError } = await supabase
-        .from('attendance_records')
-        .select('*')
-        .eq('employee_id', employeeId)
-        .eq('date', today)
-        .is('time_out', null)
-        .single();
-      
-      if (findError) {
-        throw new Error('No clock-in record found for today');
+      if (result.success) {
+        toast({
+          title: 'Clock Out',
+          description: result.message,
+        });
+      } else {
+        toast({
+          variant: 'destructive',
+          title: 'Clock Out Failed',
+          description: result.message,
+        });
+        throw new Error(result.message);
       }
-      
-      const { error: updateError } = await supabase
-        .from('attendance_records')
-        .update({ time_out: now })
-        .eq('id', data.id);
-      
-      if (updateError) throw updateError;
-      
-      toast({
-        title: 'Clock Out',
-        description: `Clocked out at ${now}`,
-      });
     } catch (error: any) {
       toast({
         variant: 'destructive',
         title: 'Clock Out Failed',
         description: error.message,
       });
+      throw error;
     }
   };
 

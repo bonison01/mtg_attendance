@@ -14,6 +14,42 @@ export const validateCode = (inputCode: string): boolean => {
 };
 
 /**
+ * Validates a selfie image by comparing it to the user's profile image
+ * In a real implementation, this would use facial recognition
+ */
+export const validateSelfie = async (employeeId: string, selfieImage: string): Promise<boolean> => {
+  try {
+    // In a production app, this would connect to a facial recognition service
+    // Here we're simulating validation with a delay and random success (80% chance)
+    await new Promise(resolve => setTimeout(resolve, 1500));
+    
+    // For demo purposes, we'll simulate a successful verification most of the time
+    return Math.random() > 0.2;
+  } catch (error) {
+    console.error("Error validating selfie:", error);
+    return false;
+  }
+};
+
+/**
+ * Validates a fingerprint scan against the stored fingerprint data
+ * In a real implementation, this would use actual biometric comparison
+ */
+export const validateFingerprint = async (employeeId: string): Promise<boolean> => {
+  try {
+    // In a production app, this would connect to a fingerprint recognition API
+    // Here we're simulating validation with a delay and random success (90% chance)
+    await new Promise(resolve => setTimeout(resolve, 1000));
+    
+    // For demo purposes, we'll simulate a high success rate
+    return Math.random() > 0.1;
+  } catch (error) {
+    console.error("Error validating fingerprint:", error);
+    return false;
+  }
+};
+
+/**
  * Fetches the current day's verification requirements from the database
  */
 export const getVerificationRequirements = async (): Promise<{ 
