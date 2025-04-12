@@ -9,19 +9,20 @@ import { fetchCompanySettings } from '@/services/companySettingsService';
 
 const Header = () => {
   const { toggle, isOpen } = useSidebar();
-  const [companyName, setCompanyName] = useState('BioPulse Inc.');
+  const [companyName, setCompanyName] = useState('BioPulse by Mateng');
 
   useEffect(() => {
     // Try to get company name from database first
     const loadCompanySettings = async () => {
       const settings = await fetchCompanySettings();
       if (settings?.company_name) {
-        setCompanyName(settings.company_name);
+        // Append "by Mateng" to the company name
+        setCompanyName(`${settings.company_name} by Mateng`);
       } else {
         // Fallback to localStorage
         const savedCompanyName = localStorage.getItem('companyName');
         if (savedCompanyName) {
-          setCompanyName(savedCompanyName);
+          setCompanyName(`${savedCompanyName} by Mateng`);
         }
       }
     };
@@ -32,7 +33,7 @@ const Header = () => {
     const handleStorageChange = () => {
       const newCompanyName = localStorage.getItem('companyName');
       if (newCompanyName) {
-        setCompanyName(newCompanyName);
+        setCompanyName(`${newCompanyName} by Mateng`);
       }
     };
 
@@ -41,8 +42,8 @@ const Header = () => {
     // Also check every second for changes in the same tab
     const interval = setInterval(() => {
       const newCompanyName = localStorage.getItem('companyName');
-      if (newCompanyName && newCompanyName !== companyName) {
-        setCompanyName(newCompanyName);
+      if (newCompanyName && newCompanyName !== companyName.replace(' by Mateng', '')) {
+        setCompanyName(`${newCompanyName} by Mateng`);
       }
     }, 1000);
 
@@ -59,7 +60,7 @@ const Header = () => {
         isOpen ? 'lg:pl-64' : ''
       )}
       style={{ 
-        borderColor: localStorage.getItem('brandColor') || '#1e3a8a' 
+        borderColor: localStorage.getItem('brandColor') || '#006400' 
       }}
     >
       <Button
@@ -74,7 +75,7 @@ const Header = () => {
       <div 
         className="font-semibold text-lg"
         style={{ 
-          color: localStorage.getItem('brandColor') || '#1e3a8a' 
+          color: localStorage.getItem('brandColor') || '#006400' 
         }}
       >
         {companyName}

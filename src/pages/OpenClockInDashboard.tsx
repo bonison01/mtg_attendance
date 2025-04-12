@@ -53,6 +53,8 @@ const OpenClockInDashboard = () => {
     requireSelfie: false,
     requireFingerprint: false
   });
+  const [companyName, setCompanyName] = useState('BioPulse by Mateng');
+  const [brandColor, setBrandColor] = useState('#006400');
   
   const videoRef = useRef<HTMLVideoElement>(null);
   const canvasRef = useRef<HTMLCanvasElement>(null);
@@ -60,6 +62,13 @@ const OpenClockInDashboard = () => {
   useEffect(() => {
     const fetchData = async () => {
       try {
+        const settings = await fetchCompanySettings();
+        if (settings) {
+          setCompanyName(`${settings.company_name} by Mateng`);
+          setBrandColor(settings.brand_color || '#006400');
+          document.documentElement.style.setProperty('--brand-color', settings.brand_color || '#006400');
+        }
+        
         const requirements = await getVerificationRequirements();
         setVerificationRequirements(requirements);
         
@@ -318,7 +327,7 @@ const OpenClockInDashboard = () => {
   if (loading) {
     return (
       <div className="flex items-center justify-center h-screen">
-        <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-primary"></div>
+        <div className="animate-spin rounded-full h-12 w-12 border-b-2" style={{borderColor: brandColor}}></div>
       </div>
     );
   }
@@ -335,11 +344,11 @@ const OpenClockInDashboard = () => {
     <div className="container mx-auto px-4 py-8">
       <div className="flex flex-col md:flex-row items-center justify-between mb-8 gap-4">
         <div className="flex items-center space-x-3">
-          <div className="bg-primary rounded-full p-2">
+          <div className="rounded-full p-2" style={{backgroundColor: brandColor}}>
             <Fingerprint className="h-8 w-8 text-primary-foreground" />
           </div>
           <div>
-            <h1 className="text-3xl font-bold tracking-tight">Employee Clock-In</h1>
+            <h1 className="text-3xl font-bold tracking-tight" style={{color: brandColor}}>{companyName}</h1>
             <p className="text-muted-foreground">Public access dashboard</p>
           </div>
         </div>
@@ -413,6 +422,7 @@ const OpenClockInDashboard = () => {
                             disabled={!!attendanceRecord.timeIn} 
                             onClick={() => initiateClockAction(employee.id, true)}
                             className="flex items-center gap-1"
+                            style={{backgroundColor: brandColor}}
                           >
                             <LogIn className="h-4 w-4" />
                             Clock In
@@ -422,6 +432,7 @@ const OpenClockInDashboard = () => {
                             disabled={!attendanceRecord.timeIn || !!attendanceRecord.timeOut}
                             onClick={() => initiateClockAction(employee.id, false)}
                             className="flex items-center gap-1"
+                            style={{borderColor: brandColor, color: brandColor}}
                           >
                             <LogOut className="h-4 w-4" />
                             Clock Out
@@ -436,6 +447,7 @@ const OpenClockInDashboard = () => {
                         <Button 
                           onClick={() => initiateClockAction(employee.id, true)} 
                           className="w-full flex items-center justify-center gap-1"
+                          style={{backgroundColor: brandColor}}
                         >
                           <LogIn className="h-4 w-4" />
                           Clock In
@@ -503,7 +515,7 @@ const OpenClockInDashboard = () => {
                       <div className="rounded-full bg-muted p-6">
                         <Camera className="h-10 w-10 text-muted-foreground" />
                       </div>
-                      <Button onClick={startCamera}>Start Camera</Button>
+                      <Button onClick={startCamera} style={{backgroundColor: brandColor}}>Start Camera</Button>
                     </div>
                   ) : capturedImage ? (
                     <div className="flex flex-col items-center space-y-3">
@@ -537,6 +549,7 @@ const OpenClockInDashboard = () => {
                             setVerificationSuccess(null);
                           }}
                           disabled={verifyingInput}
+                          style={{borderColor: brandColor, color: brandColor}}
                         >
                           Retake
                         </Button>
@@ -552,8 +565,14 @@ const OpenClockInDashboard = () => {
                         />
                       </div>
                       <div className="flex space-x-2">
-                        <Button variant="outline" onClick={stopCamera}>Cancel</Button>
-                        <Button onClick={takePicture}>Take Picture</Button>
+                        <Button 
+                          variant="outline" 
+                          onClick={stopCamera}
+                          style={{borderColor: brandColor, color: brandColor}}
+                        >
+                          Cancel
+                        </Button>
+                        <Button onClick={takePicture} style={{backgroundColor: brandColor}}>Take Picture</Button>
                       </div>
                     </div>
                   )}
@@ -570,7 +589,7 @@ const OpenClockInDashboard = () => {
                       }`} />
                       {verifyingInput && (
                         <div className="absolute inset-0 bg-black/10 rounded-full flex items-center justify-center">
-                          <Loader2 className="h-8 w-8 text-primary animate-spin" />
+                          <Loader2 className="h-8 w-8 animate-spin" style={{color: brandColor}} />
                         </div>
                       )}
                     </div>
@@ -584,6 +603,7 @@ const OpenClockInDashboard = () => {
                       <Button 
                         onClick={simulateFingerprint} 
                         disabled={fingerprintScanning || verifyingInput}
+                        style={{backgroundColor: brandColor}}
                       >
                         {fingerprintScanning ? 
                          <Loader2 className="h-4 w-4 mr-2 animate-spin" /> : 
@@ -616,6 +636,7 @@ const OpenClockInDashboard = () => {
                       <Button 
                         onClick={verifyCode} 
                         disabled={verificationCode.length !== 6 || verifyingInput || verificationSuccess === true}
+                        style={{backgroundColor: brandColor}}
                       >
                         {verifyingInput ? 
                           <Loader2 className="h-4 w-4 mr-2 animate-spin" /> : 
@@ -642,12 +663,14 @@ const OpenClockInDashboard = () => {
                 setVerificationDialogOpen(false);
                 stopCamera();
               }}
+              style={{borderColor: brandColor, color: brandColor}}
             >
               Cancel
             </Button>
             <Button 
               disabled={!verificationSuccess}
               onClick={completeVerification}
+              style={{backgroundColor: brandColor}}
             >
               {clockInMode ? 'Complete Clock In' : 'Complete Clock Out'}
             </Button>
@@ -655,14 +678,15 @@ const OpenClockInDashboard = () => {
         </DialogContent>
       </Dialog>
 
-      <div className="mt-16 border-t pt-6 text-center">
+      <div className="mt-16 border-t pt-6 text-center" style={{borderColor: brandColor}}>
         <div className="flex flex-col items-center justify-center space-y-2">
           <p className="text-sm text-muted-foreground">
-            © {new Date().getFullYear()} Company Name. All rights reserved.
+            © {new Date().getFullYear()} {companyName}. All rights reserved.
           </p>
           <a 
             href="/login" 
-            className="text-xs text-primary hover:underline"
+            className="text-xs hover:underline"
+            style={{color: brandColor}}
           >
             Admin Login
           </a>
