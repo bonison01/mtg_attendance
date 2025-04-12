@@ -1,3 +1,4 @@
+
 import React, { useState, useEffect } from 'react';
 import {
   Card,
@@ -16,10 +17,12 @@ import { Copy, RefreshCcw } from "lucide-react";
 import { getDailyCode } from '@/utils/codeGenerator';
 import { subscribeToAttendanceChanges } from '@/services/realtimeService';
 import { supabase } from '@/integrations/supabase/client';
+import { fetchCompanySettings, updateCompanySettings } from '@/services/companySettingsService';
 
 const Settings = () => {
   const { toast } = useToast();
   const [companyName, setCompanyName] = useState('BioPulse Inc.');
+  const [brandColor, setBrandColor] = useState('#1e3a8a');
   const [adminEmail, setAdminEmail] = useState('admin@company.com');
   const [verificationCode, setVerificationCode] = useState('');
   const [realtimeAttendance, setRealtimeAttendance] = useState(0);
@@ -57,11 +60,20 @@ const Settings = () => {
       }
     });
     
-    // Load company settings from local storage
-    const savedCompanyName = localStorage.getItem('companyName');
-    if (savedCompanyName) {
-      setCompanyName(savedCompanyName);
-    }
+    // Load company settings from database
+    const loadCompanySettings = async () => {
+      const settings = await fetchCompanySettings();
+      if (settings) {
+        setCompanyName(settings.company_name);
+        setBrandColor(settings.brand_color);
+        
+        // Store in localStorage as a fallback
+        localStorage.setItem('companyName', settings.company_name);
+        localStorage.setItem('brandColor', settings.brand_color);
+      }
+    };
+    
+    loadCompanySettings();
     
     // Count today's attendance records
     const fetchTodayAttendance = async () => {
@@ -102,20 +114,25 @@ const Settings = () => {
     });
   };
   
-  const handleSaveGeneral = () => {
-    // Save company name to local storage for persistence
-    localStorage.setItem('companyName', companyName);
-    
+  const handleSaveGeneral = async () => {
+    // Save to database
     setIsSavingCompany(true);
     
-    // Simulate saving to database
-    setTimeout(() => {
-      setIsSavingCompany(false);
-      toast({
-        title: "Settings Saved",
-        description: "Your general settings have been updated.",
-      });
-    }, 600);
+    const result = await updateCompanySettings({
+      company_name: companyName,
+      brand_color: brandColor
+    });
+    
+    // Also save company name to local storage for immediate UI updates
+    localStorage.setItem('companyName', companyName);
+    localStorage.setItem('brandColor', brandColor);
+    
+    setIsSavingCompany(false);
+    
+    toast({
+      title: result.success ? "Settings Saved" : "Error",
+      description: result.message,
+    });
   };
   
   const handleSaveNotifications = () => {
@@ -161,6 +178,24 @@ const Settings = () => {
                     value={companyName}
                     onChange={(e) => setCompanyName(e.target.value)}
                   />
+                </div>
+                
+                <div className="grid gap-2">
+                  <Label htmlFor="brandColor">Brand Color</Label>
+                  <div className="flex gap-2">
+                    <Input
+                      id="brandColor"
+                      value={brandColor}
+                      onChange={(e) => setBrandColor(e.target.value)}
+                    />
+                    <div 
+                      className="h-10 w-10 border rounded-md" 
+                      style={{ backgroundColor: brandColor }}
+                    />
+                  </div>
+                  <p className="text-xs text-muted-foreground">
+                    Enter a color in hex format (e.g., #006400 for dark green)
+                  </p>
                 </div>
                 
                 <div className="grid gap-2">

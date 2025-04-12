@@ -142,6 +142,30 @@ export type Database = {
           },
         ]
       }
+      company_settings: {
+        Row: {
+          brand_color: string
+          company_name: string
+          created_at: string
+          id: string
+          updated_at: string
+        }
+        Insert: {
+          brand_color?: string
+          company_name?: string
+          created_at?: string
+          id?: string
+          updated_at?: string
+        }
+        Update: {
+          brand_color?: string
+          company_name?: string
+          created_at?: string
+          id?: string
+          updated_at?: string
+        }
+        Relationships: []
+      }
       customers: {
         Row: {
           address: string | null

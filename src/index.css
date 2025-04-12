@@ -56,12 +56,31 @@
   }
 }
 
+/* Initialize custom properties from localStorage if available */
+:root {
+  --brand-color: #1e3a8a;
+}
+
+/* Use JavaScript to set this custom property */
+.brand-color {
+  color: var(--brand-color);
+}
+
+.brand-border {
+  border-color: var(--brand-color);
+}
+
+.brand-bg {
+  background-color: var(--brand-color);
+}
+
+/* Keep existing CSS below */
 .fingerprint-scanner {
   position: relative;
   width: 150px;
   height: 150px;
   border-radius: 50%;
-  background: #1e3a8a;
+  background: var(--brand-color, #1e3a8a);
   display: flex;
   justify-content: center;
   align-items: center;

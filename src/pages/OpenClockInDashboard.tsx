@@ -30,6 +30,7 @@ import {
 import { Tabs, TabsList, TabsTrigger, TabsContent } from '@/components/ui/tabs';
 import { validateCode, recordAttendance, getVerificationRequirements } from '@/services/codeService';
 import { getDailyCode } from '@/utils/codeGenerator';
+import { fetchCompanySettings } from '@/services/companySettingsService';
 
 const OpenClockInDashboard = () => {
   const [employees, setEmployees] = useState<Employee[]>([]);
