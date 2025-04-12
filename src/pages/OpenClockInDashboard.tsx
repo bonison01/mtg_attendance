@@ -50,8 +50,8 @@ const OpenClockInDashboard = () => {
   const [verifyingInput, setVerifyingInput] = useState<boolean>(false);
   const [verificationRequirements, setVerificationRequirements] = useState({
     requireCode: true,
-    requireSelfie: false,
-    requireFingerprint: false
+    requireSelfie: true,
+    requireFingerprint: true
   });
   const [companyName, setCompanyName] = useState('BioPulse by Mateng');
   const [brandColor, setBrandColor] = useState('#006400');
@@ -70,15 +70,13 @@ const OpenClockInDashboard = () => {
         }
         
         const requirements = await getVerificationRequirements();
-        setVerificationRequirements(requirements);
+        setVerificationRequirements({
+          requireCode: true,
+          requireSelfie: true,
+          requireFingerprint: true
+        });
         
-        if (requirements.requireSelfie) {
-          setVerificationTab('selfie');
-        } else if (requirements.requireFingerprint) {
-          setVerificationTab('fingerprint');
-        } else if (requirements.requireCode) {
-          setVerificationTab('code');
-        }
+        setVerificationTab('selfie');
         
         const { data: employeeData, error: employeeError } = await supabase
           .from('employees')
@@ -185,14 +183,6 @@ const OpenClockInDashboard = () => {
     setVerificationSuccess(null);
     setVerificationCode('');
     setCapturedImage(null);
-    
-    if (verificationRequirements.requireSelfie) {
-      setVerificationTab('selfie');
-    } else if (verificationRequirements.requireFingerprint) {
-      setVerificationTab('fingerprint');
-    } else {
-      setVerificationTab('code');
-    }
   };
 
   const startCamera = async () => {
@@ -484,8 +474,7 @@ const OpenClockInDashboard = () => {
               <TabsList className="grid grid-cols-3 w-full">
                 <TabsTrigger 
                   value="selfie" 
-                  className="flex items-center gap-1" 
-                  disabled={!verificationRequirements.requireSelfie && (verificationRequirements.requireCode || verificationRequirements.requireFingerprint)}
+                  className="flex items-center gap-1"
                 >
                   <Camera className="h-4 w-4" />
                   Selfie
@@ -493,7 +482,6 @@ const OpenClockInDashboard = () => {
                 <TabsTrigger 
                   value="fingerprint" 
                   className="flex items-center gap-1"
-                  disabled={!verificationRequirements.requireFingerprint && (verificationRequirements.requireCode || verificationRequirements.requireSelfie)}
                 >
                   <Fingerprint className="h-4 w-4" />
                   Fingerprint
@@ -501,7 +489,6 @@ const OpenClockInDashboard = () => {
                 <TabsTrigger 
                   value="code" 
                   className="flex items-center gap-1"
-                  disabled={!verificationRequirements.requireCode && (verificationRequirements.requireSelfie || verificationRequirements.requireFingerprint)}
                 >
                   <Hash className="h-4 w-4" />
                   Daily Code

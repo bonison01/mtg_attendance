@@ -5,7 +5,8 @@ export interface Employee {
   position: string;
   department: string;
   imageUrl?: string;
-  fingerprint?: string; // In a real app this would be secure biometric data
+  fingerprint?: string; // Stored fingerprint data/hash
+  last_selfie_url?: string; // URL to the last stored selfie image
   email: string;
   phoneNumber: string;
   joinDate: string;

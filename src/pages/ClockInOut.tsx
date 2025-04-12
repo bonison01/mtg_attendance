@@ -58,24 +58,27 @@ const ClockInOut = () => {
     setScanSuccess(null);
     
     try {
-      // Get verification requirements
+      // Get verification requirements but enable all methods
       const requirements = await getVerificationRequirements();
-      setVerificationRequirements(requirements);
+      setVerificationRequirements({
+        requireCode: true,
+        requireSelfie: true,
+        requireFingerprint: true
+      });
       
-      // Set default verification tab based on requirements
-      if (requirements.requireFingerprint) {
-        setVerificationTab('fingerprint');
-      } else if (requirements.requireSelfie) {
-        setVerificationTab('selfie');
-      } else {
-        setVerificationTab('code');
-      }
+      // Default to fingerprint tab but allow switching between all options
+      setVerificationTab('fingerprint');
       
       // Open dialog for verification
       setDialogOpen(true);
     } catch (error) {
       console.error('Error fetching verification requirements:', error);
-      // Fallback to fingerprint as default
+      // Enable all verification methods as fallback
+      setVerificationRequirements({
+        requireCode: true,
+        requireSelfie: true,
+        requireFingerprint: true
+      });
       setVerificationTab('fingerprint');
       setDialogOpen(true);
     }
@@ -366,19 +369,19 @@ const ClockInOut = () => {
           <div className="py-4">
             <Tabs value={verificationTab} onValueChange={setVerificationTab}>
               <TabsList className="grid grid-cols-3">
-                <TabsTrigger value="fingerprint" disabled={!verificationRequirements.requireFingerprint && (verificationRequirements.requireCode || verificationRequirements.requireSelfie)}>
+                <TabsTrigger value="fingerprint">
                   <div className="flex items-center gap-2">
                     <Fingerprint className="h-4 w-4" />
                     <span>Fingerprint</span>
                   </div>
                 </TabsTrigger>
-                <TabsTrigger value="selfie" disabled={!verificationRequirements.requireSelfie && (verificationRequirements.requireCode || verificationRequirements.requireFingerprint)}>
+                <TabsTrigger value="selfie">
                   <div className="flex items-center gap-2">
                     <Camera className="h-4 w-4" />
                     <span>Selfie</span>
                   </div>
                 </TabsTrigger>
-                <TabsTrigger value="code" disabled={!verificationRequirements.requireCode && (verificationRequirements.requireSelfie || verificationRequirements.requireFingerprint)}>
+                <TabsTrigger value="code">
                   <div className="flex items-center gap-2">
                     <Hash className="h-4 w-4" />
                     <span>Code</span>
