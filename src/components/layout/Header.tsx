@@ -1,8 +1,8 @@
 
 import React, { useEffect, useState } from 'react';
 import { MenuIcon } from 'lucide-react';
-import { ModeToggle } from './ThemeToggle';
-import { useSidebar } from '@/hooks/use-sidebar';
+import { ModeToggle } from '../ui/theme-toggle';  // Corrected import path
+import { useSidebar } from '@/hooks/use-sidebar';  // Corrected import path
 import { cn } from '@/lib/utils';
 import { Button } from '../ui/button';
 
